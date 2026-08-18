@@ -1,0 +1,25 @@
+{
+  "name": "git-bearings",
+  "displayName": "Git Bearings",
+  "description": "A VS Code extension that makes a repository's Git state easier to see.",
+  "version": "0.0.0",
+  "private": true,
+  "engines": {
+    "vscode": "^1.93.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "scripts": {
+    "compile": "tsc -p ./",
+    "check": "tsc --noEmit -p ./",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.93.0",
+    "typescript": "^5.7.0"
+  }
+}
