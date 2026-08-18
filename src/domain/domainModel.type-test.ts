@@ -3,6 +3,7 @@ import type {
   CommitRef,
   CurrentLocation,
   DataResult,
+  FileChange,
   HistoryCommit,
   OperationState,
   RepositoryState,
@@ -73,9 +74,45 @@ const unbornLocation: CurrentLocation = {
   head: null,
   detached: false,
 };
+// @ts-expect-error An unborn repository still has its HEAD branch name.
+const invalidUnbornLocation: CurrentLocation = {
+  kind: "unborn",
+  branchName: null,
+  head: null,
+  detached: false,
+};
 void branchLocation;
 void detachedLocation;
 void unbornLocation;
+void invalidUnbornLocation;
+
+const modifiedFile: FileChange = { path: "src/example.ts", kind: "modified" };
+const renamedFile: FileChange = {
+  path: "src/renamed.ts",
+  kind: "renamed",
+  originalPath: "src/original.ts",
+};
+const copiedFile: FileChange = {
+  path: "src/copied.ts",
+  kind: "copied",
+  originalPath: "src/original.ts",
+};
+// @ts-expect-error Renames require their original path.
+const invalidRenamedFile: FileChange = { path: "src/renamed.ts", kind: "renamed" };
+// @ts-expect-error Copies require their original path.
+const invalidCopiedFile: FileChange = { path: "src/copied.ts", kind: "copied" };
+// @ts-expect-error Ordinary changes do not have an original path.
+const invalidModifiedFile: FileChange = {
+  path: "src/example.ts",
+  kind: "modified",
+  originalPath: "src/original.ts",
+};
+void modifiedFile;
+void renamedFile;
+void copiedFile;
+void invalidRenamedFile;
+void invalidCopiedFile;
+void invalidModifiedFile;
 
 const workingTree: WorkingTreeState = {
   staged: [{ path: "src/example.ts", kind: "modified" }],
@@ -90,14 +127,28 @@ if (selection.kind === "commit") {
   const commitId: string = selection.commitId;
   void commitId;
 }
-const workingTreeSelection: SelectionState = { kind: "workingTree" };
+const workingTreeSelection: SelectionState = {
+  kind: "workingTree",
+  section: "overview",
+};
+const unstagedSelection: SelectionState = {
+  kind: "workingTree",
+  section: "unstaged",
+};
+const untrackedSelection: SelectionState = {
+  kind: "workingTree",
+  section: "untracked",
+};
 const stagingSelection: SelectionState = { kind: "staging" };
 const invalidWorkingTreeSelection: SelectionState = {
   kind: "workingTree",
+  section: "overview",
   // @ts-expect-error File-level Working Tree selection is not part of this contract.
   path: "src/example.ts",
 };
 void workingTreeSelection;
+void unstagedSelection;
+void untrackedSelection;
 void stagingSelection;
 void invalidWorkingTreeSelection;
 

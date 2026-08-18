@@ -4,7 +4,10 @@ export type SelectionState =
   | { readonly kind: "branch"; readonly branchName: string }
   | { readonly kind: "commit"; readonly commitId: string }
   | { readonly kind: "branchComparison"; readonly baseRef: string }
-  | { readonly kind: "workingTree" }
+  | {
+      readonly kind: "workingTree";
+      readonly section: "overview" | "unstaged" | "untracked";
+    }
   | { readonly kind: "staging" }
   | { readonly kind: "upstream"; readonly remoteName: string; readonly branchName: string }
   | { readonly kind: "unpushedCommits"; readonly upstreamRef: string }

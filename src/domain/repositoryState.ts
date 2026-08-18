@@ -41,7 +41,7 @@ export type CurrentLocation =
     }
   | {
       readonly kind: "unborn";
-      readonly branchName: string | null;
+      readonly branchName: string;
       readonly head: null;
       readonly detached: false;
     };
@@ -51,13 +51,22 @@ export type FileChangeKind =
   | "modified"
   | "deleted"
   | "renamed"
+  | "copied"
   | "typeChanged";
 
-export interface FileChange {
+export interface OrdinaryFileChange {
   readonly path: string;
-  readonly kind: FileChangeKind;
-  readonly originalPath?: string;
+  readonly kind: "added" | "modified" | "deleted" | "typeChanged";
+  readonly originalPath?: never;
 }
+
+export interface RenamedOrCopiedFileChange {
+  readonly path: string;
+  readonly kind: "renamed" | "copied";
+  readonly originalPath: string;
+}
+
+export type FileChange = OrdinaryFileChange | RenamedOrCopiedFileChange;
 
 export type ConflictKind =
   | "bothAdded"
