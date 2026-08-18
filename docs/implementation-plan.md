@@ -4,13 +4,13 @@
 
 ## Phase 0 — 技術成立性
 
-**目的:** 拡張の起点、SidebarとEditor Webviewの組合せ、B'レイアウトと横Graphの成立性を確認する。
+**目的:** 拡張の起点、SidebarとEditor Webviewの組合せ、Git Mapのレイアウト・横Graph・状態変化UXの成立性を比較確認する。
 
-**Issue一覧:** 1. VS Code拡張の初期構成と起点コマンド / 2. Sidebar＋Git MapハイブリッドUI / 3. B'レイアウト＋横Graphの技術試作・Gate
+**Issue一覧:** 1. VS Code拡張の初期構成と起点コマンド / 2. Sidebar＋Git MapハイブリッドUI / 3. Git Map UX・横Graphの技術試作・Gate
 
 **依存関係:** Bootstrap完了後に開始する。
 
-**Phase完了Gate:** split / tab判断、横Graph継続判断、Commit Graph renderer方式を記録する。Webview作成時からCSP、安全な文字列描画、message validationを適用する。
+**Phase完了Gate:** Compact ContinuousをGit Mapの第一候補とし、横Graph、inline SVG + HTML/CSS、Sidebarをglanceable index・Git Mapを詳しい理解の中心とする役割分担、状態変化をarrow・Prediction node・pointer移動で一続きに示す基本方向を記録する。Webview作成時からCSP、安全な文字列描画、message validationを適用する。
 
 ## Phase 1 — Gitの事実
 
@@ -34,7 +34,7 @@
 
 ## Phase 3 — Git Map
 
-**目的:** Gitの状態を横向きCommit Graph中心のMapで表現する。
+**目的:** Phase 0で決めたCompact Continuousを第一候補とするGit Map方向を実RepositoryStateへ接続し、横向きCommit Graph中心のMapとして表現する。視覚文法は後続で磨く。
 
 **Issue一覧:** 13. Git Map基本レイアウトを実データへ接続 / 14. Commit Graph Renderer / 15. HEAD / branch / Remote視覚文法 / 16. Working Tree / Staging / Stash / Prediction等の状態表現
 
@@ -81,4 +81,3 @@
 **依存関係:** Phase 0から6の統合。
 
 **Phase完了Gate:** 特殊operationとError UX、攻撃的Webview/security test、巨大Repository、Windows/macOS/Linux/WSL、VS Code Desktop、VSIXを検証する。Securityはここで初めて導入するものではなく、初期からの方針をhardeningする。
-

@@ -26,15 +26,15 @@ Repositoryを選択して現在地を確認する。Map上の対象を選んで�
 
 ## 6. UI Architecture
 
-Sidebarは現在地・状態の索引、Git Mapはmental mapの中心、Detail Paneは選択対象の説明を担う。Git MapはEditor AreaのWebview Panelとし、第一試作ではコードと左右分割する。狭い場合はMapをtab表示し、それでも不適切なら縦Graphを検討する。画面幅に応じたGraph方向の自動変更はMVPでは行わない。Webviewを最初に作る時点からCSP、Repository由来文字列の安全な描画、message validationを適用する。
+Sidebarはglanceableな現在地・状態の索引、Git Mapはmental mapと詳しい状態理解の中心、Detail Paneは第二層の説明を担う。Git MapはEditor AreaのWebview Panelとし、Phase 0 GateではCompact Continuous / Borderlessを第一候補とした。狭い場合はMapをtab表示して確認し、画面幅に応じたGraph方向の自動変更はMVPでは行わない。外部Terminal横へのfloating配置は利用形態の候補であり、Terminalとの自動連携を要件化しない。Webviewを最初に作る時点からCSP、Repository由来文字列の安全な描画、message validationを適用する。
 
 ## 7. Git Map
 
-基本レイアウトはYOUR CHANGES（Working Tree、Staging）、LOCAL REPOSITORY（Commit Graph）、REMOTE、Detail Paneで構成する。Commit Graphは原則`old → new`の横向きとする。全履歴Viewerにはせず、初期node上限は約50、必要に応じ中間履歴を省略する。
+Working Tree、Staging、LOCAL REPOSITORY（Commit Graph）、REMOTE、Detailはsemanticには別状態として扱う。ただし、視覚的には独立cardの集合へ固定せず、一枚の連続surface上で関係として表現できる。Compact Continuous / BorderlessをMVPの第一候補とし、B' / WideとCompact VerticalはPhase 0の比較prototypeとして扱う。Commit Graphは原則`old → new`の横向きを維持し、全履歴Viewerにはせず、初期node上限は約50、必要に応じ中間履歴を省略する。状態変化のarrowは概念上のsection境界をまたいでよい。
 
 ## 8. Visual Grammar
 
-commitは丸node、local branchはcommitを指す角丸label、HEADはbranchと独立したpointerで表す。通常は`HEAD → branch → commit`、detachedでは`HEAD → commit`である。branchを履歴線そのものとして描かない。remote-tracking branchはlocal branchと形状を変え通常は隠し、Remote branchはRemote領域に表示する。色だけを意味の正本にしない。
+commitは丸node、local branchはcommitを指す角丸label、HEADはbranchと独立したpointerで表す。通常は`HEAD → branch → commit`、detachedでは`HEAD → commit`である。branchを履歴線そのものとして描かない。remote-tracking branchはlocal branchと形状を変え通常は隠し、Remote branchはRemote領域に表示する。inline SVG + HTML/CSSをGraph rendererの第一候補とし、色だけを意味の正本にしない。
 
 ## 9. Repository State Model
 
@@ -91,4 +91,3 @@ Repositoryの意味的状態を変更しないことを保証する。確認対�
 ## 22. MVP Completion Criteria
 
 実Repositoryの事実を安全に読み、状態をSidebar・Git Map・Detail Paneで一貫して示せること。対象commandの影響を実行せず予測でき、Fact/Prediction/Unknownを区別できること。対応OS/VS Code Desktop/WSLで検証し、read-only、安全性、性能、VSIXを最終確認する。
-
