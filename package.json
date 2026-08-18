@@ -17,7 +17,16 @@
         "command": "gitBearings.open",
         "title": "Git Bearings: 開く"
       }
-    ]
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "gitBearings.sidebar",
+          "name": "Git Bearings",
+          "when": "gitBearings.uiOpened"
+        }
+      ]
+    }
   },
   "main": "./out/extension.js",
   "scripts": {
