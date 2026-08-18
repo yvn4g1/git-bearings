@@ -11,6 +11,14 @@
     "Other"
   ],
   "activationEvents": [],
+  "contributes": {
+    "commands": [
+      {
+        "command": "gitBearings.open",
+        "title": "Git Bearings: 開く"
+      }
+    ]
+  },
   "main": "./out/extension.js",
   "scripts": {
     "compile": "tsc -p ./",
