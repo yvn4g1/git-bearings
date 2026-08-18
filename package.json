@@ -32,6 +32,7 @@
   "scripts": {
     "compile": "tsc -p ./",
     "check": "tsc --noEmit -p ./",
+    "test:git-executor": "npm run compile && node --test out/git/gitExecutor.test.js",
     "vscode:prepublish": "npm run compile"
   },
   "devDependencies": {
