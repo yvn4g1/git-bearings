@@ -1,7 +1,20 @@
-export type DataResult<T> =
-  | { readonly kind: "available"; readonly value: T }
-  | { readonly kind: "notConfigured" }
-  | { readonly kind: "unavailable"; readonly reason: string };
+export interface Available<T> {
+  readonly kind: "available";
+  readonly value: T;
+}
+
+export interface NotConfigured {
+  readonly kind: "notConfigured";
+}
+
+export interface Unavailable {
+  readonly kind: "unavailable";
+  readonly reason: string;
+}
+
+export type DataResult<T> = Available<T> | NotConfigured | Unavailable;
+
+export type AvailabilityResult<T> = Available<T> | Unavailable;
 
 export interface RepositoryIdentity {
   readonly rootPath: string;
@@ -88,7 +101,13 @@ export interface Upstream {
 
 export interface StashEntry {
   readonly index: number;
+  readonly commitId: string;
   readonly message: string;
+}
+
+export interface HistoryCommit {
+  readonly commit: CommitRef;
+  readonly parentIds: readonly string[];
 }
 
 export type OperationState =
@@ -104,8 +123,8 @@ export interface RepositoryState {
   readonly comparison: DataResult<BranchComparison>;
   readonly remotes: DataResult<readonly Remote[]>;
   readonly upstream: DataResult<Upstream>;
-  readonly history: readonly CommitRef[];
-  readonly stash: DataResult<readonly StashEntry[]>;
+  readonly history: readonly HistoryCommit[];
+  readonly stash: AvailabilityResult<readonly StashEntry[]>;
   readonly operation: OperationState;
   readonly stateVersion: number;
   readonly refreshedAt: Date;

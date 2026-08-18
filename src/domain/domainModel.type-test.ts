@@ -1,14 +1,16 @@
 import type {
+  AvailabilityResult,
   CommitRef,
   CurrentLocation,
   DataResult,
+  HistoryCommit,
   OperationState,
   RepositoryState,
+  StashEntry,
   WorkingTreeState,
 } from "./repositoryState";
 import type {
   AppViewState,
-  PreviewState,
   SelectionState,
 } from "./appViewState";
 
@@ -88,16 +90,23 @@ if (selection.kind === "commit") {
   const commitId: string = selection.commitId;
   void commitId;
 }
+const workingTreeSelection: SelectionState = { kind: "workingTree" };
+const stagingSelection: SelectionState = { kind: "staging" };
+const invalidWorkingTreeSelection: SelectionState = {
+  kind: "workingTree",
+  // @ts-expect-error File-level Working Tree selection is not part of this contract.
+  path: "src/example.ts",
+};
+void workingTreeSelection;
+void stagingSelection;
+void invalidWorkingTreeSelection;
 
 // @ts-expect-error Selection kinds are closed by the discriminated union.
 const invalidSelection: SelectionState = { kind: "allTheThings" };
 void invalidSelection;
 
 type PreviewPayload = { readonly fixtureId: string };
-const preview: PreviewState<PreviewPayload> = {
-  kind: "present",
-  payload: { fixtureId: "preview-1" },
-};
+const preview: PreviewPayload = { fixtureId: "preview-1" };
 const appViewState: AppViewState<PreviewPayload> = {
   selection: { kind: "overview" },
   detailMode: "inspect",
@@ -106,20 +115,54 @@ const appViewState: AppViewState<PreviewPayload> = {
 const viewStateWithoutPreview: AppViewState = {
   selection: { kind: "overview" },
   detailMode: "commandInput",
-  preview: { kind: "none" },
+  preview: null,
 };
 void appViewState;
 void viewStateWithoutPreview;
+
+const stashEntry: StashEntry = {
+  index: 0,
+  commitId: "stash-commit-id",
+  message: "WIP on main",
+};
+const emptyStash: AvailabilityResult<readonly StashEntry[]> = {
+  kind: "available",
+  value: [],
+};
+const invalidStash: AvailabilityResult<readonly StashEntry[]> = {
+  // @ts-expect-error Stash is not a configurable feature.
+  kind: "notConfigured",
+};
+const stashSelection: SelectionState = {
+  kind: "stash",
+  stashCommitId: stashEntry.commitId,
+};
+// @ts-expect-error A mutable stash index is not a stash selection identity.
+const invalidStashSelection: SelectionState = { kind: "stash", stashIndex: 0 };
+void emptyStash;
+void stashEntry;
+void invalidStash;
+void stashSelection;
+void invalidStashSelection;
+
+const remoteResult: DataResult<readonly string[]> = { kind: "notConfigured" };
+void remoteResult;
+
+const history: readonly HistoryCommit[] = [
+  { commit: head, parentIds: [] },
+  { commit: head, parentIds: ["parent-id"] },
+  { commit: head, parentIds: ["first-parent-id", "second-parent-id"] },
+];
 
 const repositoryState: RepositoryState = {
   repository: { rootPath: "/workspace/example" },
   currentLocation: branchLocation,
   workingTree,
   comparison: { kind: "notConfigured" },
-  remotes: { kind: "available", value: [] },
+  remotes: { kind: "notConfigured" },
   upstream: { kind: "notConfigured" },
-  history: [head],
-  stash: { kind: "available", value: [] },
+  history,
+  stash: emptyStash,
   operation: { kind: "normal" },
   stateVersion: 1,
   refreshedAt: new Date(0),
@@ -127,3 +170,5 @@ const repositoryState: RepositoryState = {
 
 // @ts-expect-error RepositoryState contains facts only, not Preview state.
 repositoryState.preview;
+// @ts-expect-error RepositoryState contains facts only, not Graph coordinates.
+repositoryState.graphCoordinates;
