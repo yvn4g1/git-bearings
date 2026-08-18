@@ -108,7 +108,11 @@ export class ProcessRunner implements ProcessExecutor {
       });
 
       timeout = setTimeout(() => {
-        child.kill();
+        try {
+          child.kill("SIGTERM");
+        } catch {
+          // The timeout result still takes precedence if process termination fails.
+        }
         finish({ kind: "timedOut", timeoutMs: request.timeoutMs });
       }, request.timeoutMs);
     });

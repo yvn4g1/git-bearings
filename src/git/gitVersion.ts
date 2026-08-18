@@ -12,7 +12,9 @@ export type GitVersionSupport =
 const MINIMUM_GIT_VERSION: GitVersion = { major: 2, minor: 23, patch: 0 };
 
 export function parseGitVersion(stdout: string): GitVersion | undefined {
-  const match = /^git version (\d+)\.(\d+)\.(\d+)(?:[.+-].*)?$/m.exec(stdout);
+  const match = /^git version (\d+)\.(\d+)\.(\d+)(?:\.[^\s]+| \([^)]+\))?$/.exec(
+    stdout.trim(),
+  );
 
   if (!match) {
     return undefined;

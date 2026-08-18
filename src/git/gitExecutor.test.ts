@@ -11,6 +11,10 @@ import {
   GitExecutor,
   type GitLogger,
 } from "./gitExecutor";
+import {
+  resolveVscodeGitExecutable,
+  type VscodeExtensions,
+} from "./gitExecutableResolver";
 import { getGitVersionSupport } from "./gitVersion";
 import {
   ProcessRunner,
@@ -24,12 +28,20 @@ const silentLogger: GitLogger = { appendLine: () => undefined };
 
 test("ProcessRunner returns stdout and passes cwd without a shell", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "git-bearings-process-"));
-  const runner = new ProcessRunner();
+  let capturedExecutable: string | undefined;
+  let capturedArgs: readonly string[] | undefined;
+  let capturedOptions: SpawnOptions | undefined;
+  const runner = new ProcessRunner(((executable, args, options) => {
+    capturedExecutable = executable;
+    capturedArgs = args;
+    capturedOptions = options;
+    return completeFakeChild(cwd, "", 0) as unknown as ChildProcess;
+  }) satisfies SpawnProcess);
 
   try {
     const result = await runner.run({
-      executable: "/bin/pwd",
-      args: [],
+      executable: process.execPath,
+      args: ["--eval", "process.stdout.write(process.cwd())"],
       cwd,
       environment: process.env,
       timeoutMs: 1_000,
@@ -38,19 +50,28 @@ test("ProcessRunner returns stdout and passes cwd without a shell", async () => 
     assert.deepEqual(result, {
       kind: "completed",
       exitCode: 0,
-      stdout: `${cwd}\n`,
+      stdout: cwd,
       stderr: "",
     });
+    assert.equal(capturedExecutable, process.execPath);
+    assert.deepEqual(capturedArgs, ["--eval", "process.stdout.write(process.cwd())"]);
+    assert.equal(capturedOptions?.cwd, cwd);
+    assert.equal(capturedOptions?.shell, false);
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }
 });
 
 test("ProcessRunner preserves non-zero exits as completed results", async () => {
-  const runner = new ProcessRunner();
+  const runner = new ProcessRunner(() =>
+    completeFakeChild("", "missing ref", 12) as unknown as ChildProcess,
+  );
   const result = await runner.run({
-    executable: "git",
-    args: ["rev-parse", "--verify", "refs/does-not-exist"],
+    executable: process.execPath,
+    args: [
+      "--eval",
+      "process.stderr.write('missing ref'); process.exit(12)",
+    ],
     environment: process.env,
     timeoutMs: 1_000,
   });
@@ -62,14 +83,22 @@ test("ProcessRunner preserves non-zero exits as completed results", async () => 
 });
 
 test("ProcessRunner reports timeouts separately", async () => {
-  const runner = new ProcessRunner();
+  const child = createFakeChild();
+  const runner = new ProcessRunner(() => child as unknown as ChildProcess);
   const result = await runner.run({
     executable: process.execPath,
-    args: ["-e", "setTimeout(() => undefined, 1_000)"],
+    args: ["--eval", "setTimeout(() => undefined, 1_000)"],
     environment: process.env,
     timeoutMs: 20,
   });
 
+  assert.deepEqual(result, { kind: "timedOut", timeoutMs: 20 });
+  assert.deepEqual(child.killSignals, ["SIGTERM"]);
+
+  child.stdout.end();
+  child.stderr.end();
+  child.emit("close", 0);
+  await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(result, { kind: "timedOut", timeoutMs: 20 });
 });
 
@@ -170,6 +199,10 @@ test("Git version support parses integer components and platform suffixes", () =
     kind: "supported",
     version: { major: 2, minor: 39, patch: 2 },
   });
+  assert.deepEqual(getGitVersionSupport("git version 2.39.2 (Apple Git-143)\n"), {
+    kind: "supported",
+    version: { major: 2, minor: 39, patch: 2 },
+  });
   assert.deepEqual(getGitVersionSupport("git version 2.22.9\n"), {
     kind: "unsupported",
     version: { major: 2, minor: 22, patch: 9 },
@@ -178,6 +211,59 @@ test("Git version support parses integer components and platform suffixes", () =
     kind: "unavailable",
     reason: "Unrecognized Git version output.",
   });
+  assert.deepEqual(getGitVersionSupport("noise\ngit version 2.39.2\n"), {
+    kind: "unavailable",
+    reason: "Unrecognized Git version output.",
+  });
+});
+
+test("VS Code Git executable resolver normalizes extension failures", async () => {
+  const unavailable = {
+    kind: "unavailable",
+    reason: "VS Code Git extension did not provide a usable Git executable path.",
+  } as const;
+
+  assert.deepEqual(await resolveVscodeGitExecutable(missingGitExtension()), unavailable);
+  assert.deepEqual(
+    await resolveVscodeGitExecutable(throwingGitExtension("activate")),
+    unavailable,
+  );
+  assert.deepEqual(
+    await resolveVscodeGitExecutable(throwingGitExtension("getAPI")),
+    unavailable,
+  );
+  assert.deepEqual(
+    await resolveVscodeGitExecutable({
+      getExtension: () => {
+        throw new Error("disabled");
+      },
+    }),
+    unavailable,
+  );
+  assert.deepEqual(
+    await resolveVscodeGitExecutable(activeGitExtension("/vscode/git")),
+    { kind: "available", path: "/vscode/git" },
+  );
+});
+
+test("GitExecutor logger never includes command output payloads", async () => {
+  const logger = new RecordingLogger();
+  const executor = new GitExecutor(
+    "git",
+    new RecordingProcessExecutor({
+      kind: "completed",
+      exitCode: 1,
+      stdout: "token=top-secret",
+      stderr: "password=also-secret",
+    }),
+    logger,
+  );
+
+  await executor.execute(["version"]);
+
+  assert.equal(logger.lines.length, 1);
+  assert.equal(logger.lines[0].includes("top-secret"), false);
+  assert.equal(logger.lines[0].includes("also-secret"), false);
 });
 
 test("GitExecutor reports unavailable when version execution fails", async () => {
@@ -220,20 +306,82 @@ class RecordingProcessExecutor implements ProcessExecutor {
   }
 }
 
+class RecordingLogger implements GitLogger {
+  readonly lines: string[] = [];
+
+  appendLine(value: string): void {
+    this.lines.push(value);
+  }
+}
+
 function createFakeChild(): EventEmitter & {
   readonly stdout: PassThrough;
   readonly stderr: PassThrough;
-  kill(): boolean;
+  readonly killSignals: string[];
+  kill(signal?: NodeJS.Signals): boolean;
 } {
   const child = new EventEmitter() as EventEmitter & {
     readonly stdout: PassThrough;
     readonly stderr: PassThrough;
-    kill(): boolean;
+    readonly killSignals: string[];
+    kill(signal?: NodeJS.Signals): boolean;
   };
+  const killSignals: string[] = [];
   Object.assign(child, {
     stdout: new PassThrough(),
     stderr: new PassThrough(),
-    kill: () => true,
+    killSignals,
+    kill: (signal?: NodeJS.Signals) => {
+      if (signal) {
+        killSignals.push(signal);
+      }
+      return true;
+    },
   });
   return child;
+}
+
+function completeFakeChild(
+  stdout: string,
+  stderr: string,
+  exitCode: number,
+): ReturnType<typeof createFakeChild> {
+  const child = createFakeChild();
+  queueMicrotask(() => {
+    child.stdout.end(stdout);
+    child.stderr.end(stderr);
+    child.emit("close", exitCode);
+  });
+  return child;
+}
+
+function missingGitExtension(): VscodeExtensions {
+  return { getExtension: () => undefined };
+}
+
+function throwingGitExtension(
+  failure: "activate" | "getAPI",
+): VscodeExtensions {
+  return {
+    getExtension: () => ({
+      isActive: failure === "getAPI",
+      exports:
+        failure === "getAPI"
+          ? { getAPI: () => { throw new Error("getAPI failed"); } }
+          : undefined,
+      activate: async () => {
+        throw new Error("activate failed");
+      },
+    }),
+  };
+}
+
+function activeGitExtension(path: string): VscodeExtensions {
+  return {
+    getExtension: () => ({
+      isActive: true,
+      exports: { getAPI: () => ({ git: { path } }) },
+      activate: async () => ({ getAPI: () => ({ git: { path } }) }),
+    }),
+  };
 }
