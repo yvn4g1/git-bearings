@@ -74,7 +74,7 @@ merge、rebase、detached HEAD、conflict、stash、未対応operationなどを�
 
 ## 18. Supported Git Commands
 
-MVPの対象commandはParser/Sumulatorの実装段階で定義する。Git CLIの観測はread-only command signature allowlist方式とし、単なるsubcommand名allowlistにはしない。たとえば`stash list`、`config --get`、remote一覧取得は許可し、`stash pop`、config変更、`remote add`は許可しない。
+MVPの対象commandはParser/Simulatorの実装段階で定義する。Git CLIの観測はread-only command signature allowlist方式とし、単なるsubcommand名allowlistにはしない。たとえば`stash list`、`config --get`、remote一覧取得は許可し、`stash pop`、config変更、`remote add`は許可しない。
 
 ## 19. Out of Scope
 
