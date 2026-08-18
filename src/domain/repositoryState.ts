@@ -1,0 +1,112 @@
+export type DataResult<T> =
+  | { readonly kind: "available"; readonly value: T }
+  | { readonly kind: "notConfigured" }
+  | { readonly kind: "unavailable"; readonly reason: string };
+
+export interface RepositoryIdentity {
+  readonly rootPath: string;
+}
+
+export interface CommitRef {
+  readonly id: string;
+  readonly shortId: string;
+  readonly subject: string;
+}
+
+export type CurrentLocation =
+  | {
+      readonly kind: "branch";
+      readonly branchName: string;
+      readonly head: CommitRef;
+      readonly detached: false;
+    }
+  | {
+      readonly kind: "detached";
+      readonly branchName: null;
+      readonly head: CommitRef;
+      readonly detached: true;
+    }
+  | {
+      readonly kind: "unborn";
+      readonly branchName: string | null;
+      readonly head: null;
+      readonly detached: false;
+    };
+
+export type FileChangeKind =
+  | "added"
+  | "modified"
+  | "deleted"
+  | "renamed"
+  | "typeChanged";
+
+export interface FileChange {
+  readonly path: string;
+  readonly kind: FileChangeKind;
+  readonly originalPath?: string;
+}
+
+export type ConflictKind =
+  | "bothAdded"
+  | "bothDeleted"
+  | "bothModified"
+  | "deletedByUs"
+  | "deletedByThem"
+  | "addedByUs"
+  | "addedByThem";
+
+export interface ConflictFile {
+  readonly path: string;
+  readonly kind: ConflictKind;
+}
+
+export interface WorkingTreeState {
+  readonly staged: readonly FileChange[];
+  readonly unstaged: readonly FileChange[];
+  readonly untracked: readonly string[];
+  readonly conflicts: readonly ConflictFile[];
+}
+
+export interface BranchComparison {
+  readonly baseRef: string;
+  readonly mergeBase: CommitRef | null;
+  readonly ahead: number;
+  readonly behind: number;
+}
+
+export interface Remote {
+  readonly name: string;
+  readonly fetchUrl: string | null;
+  readonly pushUrl: string | null;
+}
+
+export interface Upstream {
+  readonly remoteName: string;
+  readonly branchName: string;
+  readonly trackingRef: string;
+}
+
+export interface StashEntry {
+  readonly index: number;
+  readonly message: string;
+}
+
+export type OperationState =
+  | { readonly kind: "normal" }
+  | { readonly kind: "merge" }
+  | { readonly kind: "rebase" }
+  | { readonly kind: "unsupported"; readonly operationName: string };
+
+export interface RepositoryState {
+  readonly repository: RepositoryIdentity;
+  readonly currentLocation: CurrentLocation;
+  readonly workingTree: WorkingTreeState;
+  readonly comparison: DataResult<BranchComparison>;
+  readonly remotes: DataResult<readonly Remote[]>;
+  readonly upstream: DataResult<Upstream>;
+  readonly history: readonly CommitRef[];
+  readonly stash: DataResult<readonly StashEntry[]>;
+  readonly operation: OperationState;
+  readonly stateVersion: number;
+  readonly refreshedAt: Date;
+}
