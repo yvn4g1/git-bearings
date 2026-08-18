@@ -1,3 +1,5 @@
+import type * as vscode from "vscode";
+
 interface VscodeGitApi {
   readonly git: {
     readonly path: string;
@@ -8,15 +10,13 @@ interface VscodeGitExtensionExports {
   getAPI(version: 1): VscodeGitApi;
 }
 
-interface VscodeGitExtension {
+export interface VscodeGitExtension {
   readonly isActive: boolean;
   readonly exports: VscodeGitExtensionExports | undefined;
-  activate(): Promise<VscodeGitExtensionExports>;
+  activate(): PromiseLike<VscodeGitExtensionExports>;
 }
 
-export interface VscodeExtensions {
-  getExtension<T>(id: string): VscodeGitExtension | undefined;
-}
+export type VscodeExtensions = Pick<typeof vscode.extensions, "getExtension">;
 
 export type GitExecutableResolution =
   | { readonly kind: "available"; readonly path: string }
@@ -25,8 +25,16 @@ export type GitExecutableResolution =
 export async function resolveVscodeGitExecutable(
   extensions: VscodeExtensions,
 ): Promise<GitExecutableResolution> {
+  return resolveGitExecutableFromLookup(() =>
+    extensions.getExtension<VscodeGitExtensionExports>("vscode.git"),
+  );
+}
+
+export async function resolveGitExecutableFromLookup(
+  getGitExtension: () => VscodeGitExtension | undefined,
+): Promise<GitExecutableResolution> {
   try {
-    const extension = extensions.getExtension<VscodeGitExtensionExports>("vscode.git");
+    const extension = getGitExtension();
 
     if (!extension) {
       return unavailable();

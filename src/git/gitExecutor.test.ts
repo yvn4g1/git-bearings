@@ -12,8 +12,8 @@ import {
   type GitLogger,
 } from "./gitExecutor";
 import {
-  resolveVscodeGitExecutable,
-  type VscodeExtensions,
+  resolveGitExecutableFromLookup,
+  type VscodeGitExtension,
 } from "./gitExecutableResolver";
 import { getGitVersionSupport } from "./gitVersion";
 import {
@@ -223,25 +223,23 @@ test("VS Code Git executable resolver normalizes extension failures", async () =
     reason: "VS Code Git extension did not provide a usable Git executable path.",
   } as const;
 
-  assert.deepEqual(await resolveVscodeGitExecutable(missingGitExtension()), unavailable);
+  assert.deepEqual(await resolveGitExecutableFromLookup(missingGitExtension), unavailable);
   assert.deepEqual(
-    await resolveVscodeGitExecutable(throwingGitExtension("activate")),
+    await resolveGitExecutableFromLookup(() => throwingGitExtension("activate")),
     unavailable,
   );
   assert.deepEqual(
-    await resolveVscodeGitExecutable(throwingGitExtension("getAPI")),
+    await resolveGitExecutableFromLookup(() => throwingGitExtension("getAPI")),
     unavailable,
   );
   assert.deepEqual(
-    await resolveVscodeGitExecutable({
-      getExtension: () => {
-        throw new Error("disabled");
-      },
+    await resolveGitExecutableFromLookup(() => {
+      throw new Error("disabled");
     }),
     unavailable,
   );
   assert.deepEqual(
-    await resolveVscodeGitExecutable(activeGitExtension("/vscode/git")),
+    await resolveGitExecutableFromLookup(() => activeGitExtension("/vscode/git")),
     { kind: "available", path: "/vscode/git" },
   );
 });
@@ -355,33 +353,29 @@ function completeFakeChild(
   return child;
 }
 
-function missingGitExtension(): VscodeExtensions {
-  return { getExtension: () => undefined };
+function missingGitExtension(): VscodeGitExtension | undefined {
+  return undefined;
 }
 
 function throwingGitExtension(
   failure: "activate" | "getAPI",
-): VscodeExtensions {
+): VscodeGitExtension {
   return {
-    getExtension: () => ({
-      isActive: failure === "getAPI",
-      exports:
-        failure === "getAPI"
-          ? { getAPI: () => { throw new Error("getAPI failed"); } }
-          : undefined,
-      activate: async () => {
-        throw new Error("activate failed");
-      },
-    }),
+    isActive: failure === "getAPI",
+    exports:
+      failure === "getAPI"
+        ? { getAPI: () => { throw new Error("getAPI failed"); } }
+        : undefined,
+    activate: async () => {
+      throw new Error("activate failed");
+    },
   };
 }
 
-function activeGitExtension(path: string): VscodeExtensions {
+function activeGitExtension(path: string): VscodeGitExtension {
   return {
-    getExtension: () => ({
-      isActive: true,
-      exports: { getAPI: () => ({ git: { path } }) },
-      activate: async () => ({ getAPI: () => ({ git: { path } }) }),
-    }),
+    isActive: true,
+    exports: { getAPI: () => ({ git: { path } }) },
+    activate: async () => ({ getAPI: () => ({ git: { path } }) }),
   };
 }
