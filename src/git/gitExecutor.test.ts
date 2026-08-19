@@ -161,6 +161,28 @@ test("ProcessRunner pipes controlled stdin only when requested", async () => {
   assert.equal(capturedOptions?.stdio?.[0], "pipe");
 });
 
+test("ProcessRunner normalizes stdin write errors without double-settling", async () => {
+  const child = createFakeChild();
+  const stdin = new PassThrough();
+  Object.assign(child, { stdin });
+  const runner = new ProcessRunner(() => child as unknown as ChildProcess);
+  const resultPromise = runner.run({
+    executable: process.execPath,
+    args: [],
+    environment: process.env,
+    timeoutMs: 1_000,
+    stdin: Buffer.alloc(1024),
+  });
+  stdin.emit("error", new Error("EPIPE"));
+  child.stdout.end();
+  child.stderr.end();
+  child.emit("close", 0);
+  const result = await resultPromise;
+
+  assert.equal(result.kind, "spawnFailed");
+  assert.deepEqual(child.killSignals, ["SIGTERM"]);
+});
+
 test("GitExecutor rejects non-allowlisted and write signatures before spawn", async () => {
   const processExecutor = new RecordingProcessExecutor();
   const executor = new GitExecutor("git", processExecutor, silentLogger);

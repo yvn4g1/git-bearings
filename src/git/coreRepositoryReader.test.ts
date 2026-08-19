@@ -116,6 +116,58 @@ test("CoreRepositoryReader represents a staged rename with an unstaged modificat
   } finally { await rm(repository, { recursive: true, force: true }); }
 });
 
+test("CoreRepositoryReader reports a clean normal repository", async () => {
+  const repository = await createRepository();
+  try {
+    await commitFile(repository, "clean.txt", "clean\n", "root");
+    const { stdout } = await execFile("git", ["rev-parse", "HEAD"], { cwd: repository });
+    const result = await readCore(repository);
+    assert.equal(result.kind, "available");
+    if (result.kind === "available") {
+      assert.equal(result.value.currentLocation.kind, "branch");
+      assert.deepEqual(result.value.workingTree, { staged: [], unstaged: [], untracked: [], conflicts: [] });
+      assert.equal(result.value.history[0].commit.id, stdout.trim());
+      assert.deepEqual(result.value.operation, { kind: "normal" });
+    }
+  } finally { await rm(repository, { recursive: true, force: true }); }
+});
+
+test("CoreRepositoryReader reads true merges, merge conflicts, and rebase conflicts", async () => {
+  const mergeRepository = await createRepository();
+  const conflictRepository = await createRepository();
+  const rebaseRepository = await createRepository();
+  try {
+    await commitFile(mergeRepository, "root.txt", "root\n", "root");
+    await git(mergeRepository, "branch", "feature");
+    await commitFile(mergeRepository, "main.txt", "main\n", "main");
+    await git(mergeRepository, "checkout", "feature");
+    await commitFile(mergeRepository, "feature.txt", "feature\n", "feature");
+    await git(mergeRepository, "checkout", "main");
+    await git(mergeRepository, "merge", "--no-ff", "feature", "-m", "merge feature");
+    const mergeResult = await readCore(mergeRepository);
+    assert.equal(mergeResult.kind, "available");
+    if (mergeResult.kind === "available") assert.equal(mergeResult.value.history[0].parentIds.length, 2);
+
+    await createDivergedConflict(conflictRepository);
+    await gitFails(conflictRepository, "merge", "feature");
+    const conflictResult = await readCore(conflictRepository);
+    assert.equal(conflictResult.kind, "available");
+    if (conflictResult.kind === "available") {
+      assert.deepEqual(conflictResult.value.operation, { kind: "merge" });
+      assert.equal(conflictResult.value.workingTree.conflicts[0]?.path, "shared.txt");
+    }
+
+    await createDivergedConflict(rebaseRepository);
+    await git(rebaseRepository, "checkout", "feature");
+    await gitFails(rebaseRepository, "rebase", "main");
+    const rebaseResult = await readCore(rebaseRepository);
+    assert.equal(rebaseResult.kind, "available");
+    if (rebaseResult.kind === "available") assert.deepEqual(rebaseResult.value.operation, { kind: "rebase" });
+  } finally {
+    await Promise.all([mergeRepository, conflictRepository, rebaseRepository].map((path) => rm(path, { recursive: true, force: true })));
+  }
+});
+
 test("CoreRepositoryReader supports unborn and detached repositories", async () => {
   const unborn = await createRepository();
   const detached = await createRepository();
@@ -218,4 +270,21 @@ async function commitFile(repository: string, path: string, content: string, mes
 
 async function git(repository: string, ...args: string[]): Promise<void> {
   await execFile("git", args, { cwd: repository });
+}
+
+async function gitFails(repository: string, ...args: string[]): Promise<void> {
+  await assert.rejects(execFile("git", args, { cwd: repository }));
+}
+
+async function createDivergedConflict(repository: string): Promise<void> {
+  await commitFile(repository, "shared.txt", "base\n", "root");
+  await git(repository, "branch", "feature");
+  await writeFile(join(repository, "shared.txt"), "main\n");
+  await git(repository, "add", "shared.txt");
+  await git(repository, "commit", "-m", "main change");
+  await git(repository, "checkout", "feature");
+  await writeFile(join(repository, "shared.txt"), "feature\n");
+  await git(repository, "add", "shared.txt");
+  await git(repository, "commit", "-m", "feature change");
+  await git(repository, "checkout", "main");
 }
