@@ -28,6 +28,18 @@ test("reads remote tracking refs, a symbolic default, upstream relation, and NUL
   } finally { await rm(repository, { recursive: true, force: true }); }
 });
 
+test("reads a single stash entry with its index, full commit id, and message", async () => {
+  const repository = await createRepository();
+  try {
+    await commit(repository, "base.txt", "base\n", "base"); const head = await gitOutput(repository, "rev-parse", "HEAD");
+    await writeFile(join(repository, "single stash.txt"), "stash\n"); await git(repository, "add", "single stash.txt"); await git(repository, "stash", "push", "-m", "single stash message");
+    const facts = await read(repository, normalFacts("main", head));
+    assert.equal(facts.stash.kind, "available"); if (facts.stash.kind === "available") {
+      assert.equal(facts.stash.value.length, 1); assert.equal(facts.stash.value[0].index, 0); assert.match(facts.stash.value[0].commitId, /^[0-9a-f]{40}$/); assert.equal(facts.stash.value[0].message, "On main: single stash message");
+    }
+  } finally { await rm(repository, { recursive: true, force: true }); }
+});
+
 test("maps exact, custom, negative, and prefix-colliding fetch refspecs without path inference", async () => {
   const repository = await createRepository();
   try {
