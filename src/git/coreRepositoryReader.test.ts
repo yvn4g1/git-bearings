@@ -16,6 +16,7 @@ import {
 } from "./coreRepositoryReader";
 import { GitExecutor, type GitLogger } from "./gitExecutor";
 import { ProcessRunner } from "./processRunner";
+import type { ProcessExecutor, ProcessRequest, ProcessResult } from "./processRunner";
 
 const execFile = promisify(execFileCallback);
 const silentLogger: GitLogger = { appendLine: () => undefined };
@@ -194,7 +195,7 @@ test("CoreRepositoryReader refuses active external filters before status", async
   const marker = join(repository, "filter-ran");
   try {
     await commitFile(repository, "filtered.txt", "content\n", "root");
-    await git(repository, "config", "filter.evil.clean", `touch ${marker}`);
+    await git(repository, "config", "filter.evil.clean", await markerCommand(repository, marker));
     await writeFile(join(repository, ".gitattributes"), "filtered.txt filter=evil\n");
     await git(repository, "add", ".gitattributes");
     await git(repository, "commit", "-m", "configure filter attribute");
@@ -211,8 +212,8 @@ test("CoreRepositoryReader neutralizes fsmonitor and allows inactive configured 
   const filterMarker = join(repository, "filter-ran");
   try {
     await commitFile(repository, "tracked.txt", "content\n", "root");
-    await git(repository, "config", "core.fsmonitor", `touch ${fsmonitorMarker}`);
-    await git(repository, "config", "filter.evil.clean", `touch ${filterMarker}`);
+    await git(repository, "config", "core.fsmonitor", await markerCommand(repository, fsmonitorMarker));
+    await git(repository, "config", "filter.evil.clean", await markerCommand(repository, filterMarker));
     const result = await readCore(repository);
     assert.equal(result.kind, "available");
     await assert.rejects(access(fsmonitorMarker));
@@ -245,6 +246,44 @@ test("CoreRepositoryReader rejects gitlinks before reading status", async () => 
     const result = await readCore(repository);
     assert.equal(result.kind, "unavailable");
   } finally { await rm(repository, { recursive: true, force: true }); }
+});
+
+test("CoreRepositoryReader reads with log.showSignature enabled", async () => {
+  const repository = await createRepository();
+  try {
+    await commitFile(repository, "signed.txt", "content\n", "root");
+    await git(repository, "config", "log.showSignature", "true");
+    assert.equal((await readCore(repository)).kind, "available");
+  } finally { await rm(repository, { recursive: true, force: true }); }
+});
+
+test("CoreRepositoryReader normalizes command failures and version-gate failures", async () => {
+  const unsupported = new CoreFixtureExecutor({ version: "git version 2.22.9\n" });
+  assert.equal((await new CoreRepositoryReader(new GitExecutor("git", unsupported, silentLogger)).read(process.cwd())).kind, "unavailable");
+  assert.deepEqual(unsupported.requests.map((request) => request.args.at(-1)), ["version"]);
+  const versionFailure = new CoreFixtureExecutor({ versionFailure: true });
+  assert.equal((await new CoreRepositoryReader(new GitExecutor("git", versionFailure, silentLogger)).read(process.cwd())).kind, "unavailable");
+  assert.equal(versionFailure.requests.length, 1);
+  const commandFailure = new CoreFixtureExecutor({ failRoot: true });
+  assert.equal((await new CoreRepositoryReader(new GitExecutor("git", commandFailure, silentLogger)).read(process.cwd())).kind, "unavailable");
+});
+
+test("CoreRepositoryReader rejects snapshot mismatches and caches supported versions", async () => {
+  const mismatch = new CoreFixtureExecutor({ historyId: "b".repeat(40) });
+  assert.equal((await new CoreRepositoryReader(new GitExecutor("git", mismatch, silentLogger)).read(process.cwd())).kind, "unavailable");
+  const cached = new CoreFixtureExecutor({});
+  const reader = new CoreRepositoryReader(new GitExecutor("git", cached, silentLogger));
+  assert.equal((await reader.read(process.cwd())).kind, "available");
+  assert.equal((await reader.read(process.cwd())).kind, "available");
+  assert.equal(cached.requests.filter((request) => request.args.at(-1) === "version").length, 1);
+});
+
+test("CoreRepositoryReader stops before status for gitlinks and active filters", async () => {
+  for (const mode of ["gitlink", "activeFilter"] as const) {
+    const executor = new CoreFixtureExecutor({ mode });
+    assert.equal((await new CoreRepositoryReader(new GitExecutor("git", executor, silentLogger)).read(process.cwd())).kind, "unavailable");
+    assert.equal(executor.requests.some((request) => request.args.includes("status")), false);
+  }
 });
 
 async function readCore(repository: string) {
@@ -287,4 +326,29 @@ async function createDivergedConflict(repository: string): Promise<void> {
   await git(repository, "add", "shared.txt");
   await git(repository, "commit", "-m", "feature change");
   await git(repository, "checkout", "main");
+}
+
+async function markerCommand(repository: string, marker: string): Promise<string> {
+  const script = join(repository, ".git", "git-bearings-marker.js");
+  await writeFile(script, "require('node:fs').writeFileSync(process.argv[2], 'marker');\n");
+  return [process.execPath, script, marker].map((value) => JSON.stringify(value)).join(" ");
+}
+
+class CoreFixtureExecutor implements ProcessExecutor {
+  readonly requests: ProcessRequest[] = [];
+  constructor(private readonly options: { version?: string; versionFailure?: boolean; failRoot?: boolean; historyId?: string; mode?: "gitlink" | "activeFilter" }) {}
+  async run(request: ProcessRequest): Promise<ProcessResult> {
+    this.requests.push(request);
+    const args = request.args;
+    const completed = (stdout: string, exitCode = 0): ProcessResult => ({ kind: "completed", exitCode, stdout, stderr: "" });
+    if (args.at(-1) === "version") return this.options.versionFailure ? { kind: "spawnFailed", error: new Error("ENOENT") } : completed(this.options.version ?? "git version 2.39.0\n");
+    if (args.includes("--show-toplevel")) return this.options.failRoot ? { kind: "spawnFailed", error: new Error("failure") } : completed(process.cwd() + "\n");
+    if (args.includes("ls-files")) return completed(this.options.mode === "gitlink" ? `160000 ${"a".repeat(40)} 0\tsub\0` : `100644 ${"a".repeat(40)} 0\tfile\0`);
+    if (args.includes("config")) return this.options.mode === "activeFilter" ? completed("filter.evil.clean\0") : completed("", 1);
+    if (args.includes("check-attr")) return completed("file\0filter\0evil\0");
+    if (args.includes("status")) return completed(`# branch.oid ${"a".repeat(40)}\0# branch.head main\0`);
+    if (args.includes("for-each-ref")) return completed(`refs/heads/main\t${"a".repeat(40)}\n`);
+    if (args.includes("log")) return completed(`${this.options.historyId ?? "a".repeat(40)}\0aaaaaaa\0\0root\0`);
+    return completed(".git/unused\n");
+  }
 }
