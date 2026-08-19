@@ -16,11 +16,11 @@
 
 **目的:** UIから独立した安全なRepositoryの事実モデルと読取基盤を確立する。
 
-**Issue一覧:** 4. RepositoryState / AppViewState / 5. 安全なread-only Git実行基盤 / 6. Core Repository Reader / 7. Repository選択・記憶 / 8. 基準branch判定・branch比較 / 9. Remote / upstream / stash Reader
+**Issue一覧:** 4. RepositoryState / AppViewState / 5. 安全なread-only Git実行基盤 / 6. Core Repository Reader / 7. Repository選択・記憶 / 9. Remote / upstream / stash Reader / 8. 基準branch判定・branch比較
 
 **依存関係:** Phase 0 Gate、およびIssue 4・5を基礎とする。
 
-**Phase完了Gate:** 意味的にread-onlyなallowlist実行でRepositoryStateを取得し、available/notConfigured/unavailable、operation、remote/upstreamを誤って断定せず表現できる。
+**Phase完了Gate:** P06のCore facts、P09のSupplemental facts、P08のComparisonを合成して最終RepositoryStateを構成する。途中で未取得のSupplementalをfakeなunavailableで埋めない。意味的にread-onlyなallowlist実行でRepositoryStateを取得し、available/notConfigured/unavailable、operation、remote/upstreamを誤って断定せず表現できる。
 
 ## Phase 2 — 現在地
 

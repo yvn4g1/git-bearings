@@ -1,13 +1,21 @@
 import type {
+  AheadBehind,
   AvailabilityResult,
+  BranchComparison,
   CommitRef,
+  CoreRepositoryFacts,
   CurrentLocation,
   DataResult,
   FileChange,
   HistoryCommit,
+  LocalBranch,
+  Remote,
+  RemoteTrackingRef,
   OperationState,
   RepositoryState,
+  SupplementalRepositoryFacts,
   StashEntry,
+  Upstream,
   WorkingTreeState,
 } from "./repositoryState";
 import type {
@@ -205,16 +213,142 @@ const history: readonly HistoryCommit[] = [
   { commit: head, parentIds: ["first-parent-id", "second-parent-id"] },
 ];
 
-const repositoryState: RepositoryState = {
+const localBranches: readonly LocalBranch[] = [
+  { name: "main", tipCommitId: head.id },
+  { name: "feature/example", tipCommitId: "feature-commit-id" },
+];
+
+const branchCoreFacts: CoreRepositoryFacts = {
   repository: { rootPath: "/workspace/example" },
   currentLocation: branchLocation,
+  localBranches,
   workingTree,
-  comparison: { kind: "notConfigured" },
-  remotes: { kind: "notConfigured" },
-  upstream: { kind: "notConfigured" },
   history,
-  stash: emptyStash,
   operation: { kind: "normal" },
+};
+const unbornCoreFacts: CoreRepositoryFacts = {
+  ...branchCoreFacts,
+  currentLocation: unbornLocation,
+  localBranches: [],
+  history: [],
+};
+const coreFactsWithComparison: CoreRepositoryFacts = {
+  ...branchCoreFacts,
+  // @ts-expect-error Core facts do not include Comparison.
+  comparison: { kind: "notConfigured" },
+};
+const coreFactsWithRemotes: CoreRepositoryFacts = {
+  ...branchCoreFacts,
+  // @ts-expect-error Core facts do not include Remote facts.
+  remotes: { kind: "notConfigured" },
+};
+const coreFactsWithUpstream: CoreRepositoryFacts = {
+  ...branchCoreFacts,
+  // @ts-expect-error Core facts do not include upstream facts.
+  upstream: { kind: "notConfigured" },
+};
+const coreFactsWithStash: CoreRepositoryFacts = {
+  ...branchCoreFacts,
+  // @ts-expect-error Core facts do not include stash facts.
+  stash: emptyStash,
+};
+const coreFactsWithRefreshMetadata: CoreRepositoryFacts = {
+  ...branchCoreFacts,
+  // @ts-expect-error Core facts do not include refresh metadata.
+  stateVersion: 1,
+  refreshedAt: new Date(0),
+};
+const coreFactsWithGraphCoordinates: CoreRepositoryFacts = {
+  ...branchCoreFacts,
+  // @ts-expect-error Core facts do not include UI Graph coordinates.
+  graphCoordinates: { x: 0, y: 0 },
+};
+void branchCoreFacts;
+void unbornCoreFacts;
+void coreFactsWithComparison;
+void coreFactsWithRemotes;
+void coreFactsWithUpstream;
+void coreFactsWithStash;
+void coreFactsWithRefreshMetadata;
+void coreFactsWithGraphCoordinates;
+
+const remoteTrackingRef: RemoteTrackingRef = {
+  branchName: "main",
+  trackingRef: "refs/remotes/origin/main",
+  commitId: head.id,
+};
+const remoteWithoutKnownDefault: Remote = {
+  name: "origin",
+  trackingRefs: [],
+  locallyKnownDefaultBranch: null,
+};
+const remoteWithKnownDefault: Remote = {
+  name: "origin",
+  trackingRefs: [remoteTrackingRef],
+  locallyKnownDefaultBranch: {
+    branchName: "main",
+    trackingRef: "refs/remotes/origin/main",
+  },
+};
+const remotesNotConfigured: DataResult<readonly Remote[]> = {
+  kind: "notConfigured",
+};
+const remoteWithUrl: Remote = {
+  ...remoteWithoutKnownDefault,
+  // @ts-expect-error Remote facts never retain potentially sensitive URLs.
+  fetchUrl: "https://example.invalid/repository.git",
+};
+void remoteTrackingRef;
+void remoteWithoutKnownDefault;
+void remoteWithKnownDefault;
+void remotesNotConfigured;
+void remoteWithUrl;
+
+const upstreamRelation: AvailabilityResult<AheadBehind> = {
+  kind: "available",
+  value: { ahead: 2, behind: 1 },
+};
+const upstreamWithRelation: Upstream = {
+  remoteName: "origin",
+  branchName: "main",
+  trackingRef: "refs/remotes/origin/main",
+  relation: upstreamRelation,
+};
+const upstreamWithoutRelation: Upstream = {
+  ...upstreamWithRelation,
+  relation: { kind: "unavailable", reason: "tracking ref is not available" },
+};
+const upstreamNotConfigured: DataResult<Upstream> = { kind: "notConfigured" };
+const upstreamUnavailable: DataResult<Upstream> = {
+  kind: "unavailable",
+  reason: "upstream configuration could not be read",
+};
+const branchComparison: BranchComparison = {
+  baseRef: "main",
+  mergeBase: head,
+  ahead: 3,
+  behind: 0,
+};
+// @ts-expect-error An upstream relation is not a BranchComparison fact.
+const invalidBranchComparison: BranchComparison = upstreamRelation.value;
+void upstreamWithRelation;
+void upstreamWithoutRelation;
+void upstreamNotConfigured;
+void upstreamUnavailable;
+void branchComparison;
+void invalidBranchComparison;
+
+const supplementalFacts: SupplementalRepositoryFacts = {
+  remotes: { kind: "available", value: [remoteWithKnownDefault] },
+  upstream: { kind: "available", value: upstreamWithoutRelation },
+  stash: emptyStash,
+};
+void supplementalFacts;
+
+const repositoryState: RepositoryState = {
+  ...branchCoreFacts,
+  ...supplementalFacts,
+  comparison: { kind: "available", value: branchComparison },
   stateVersion: 1,
   refreshedAt: new Date(0),
 };
@@ -223,3 +357,5 @@ const repositoryState: RepositoryState = {
 repositoryState.preview;
 // @ts-expect-error RepositoryState contains facts only, not Graph coordinates.
 repositoryState.graphCoordinates;
+const finalLocalBranches: readonly LocalBranch[] = repositoryState.localBranches;
+void finalLocalBranches;

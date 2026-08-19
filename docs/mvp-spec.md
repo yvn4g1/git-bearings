@@ -38,7 +38,7 @@ commitは丸node、local branchはcommitを指す角丸label、HEADはbranchと�
 
 ## 9. Repository State Model
 
-RepositoryStateはGitの事実のみを保持し、UI座標・色・animation・HTML・初心者向け説明文を含めない。Gitの事実とUI representationを分離する。補助情報は`available`、`notConfigured`、`unavailable`を区別する。OperationStateは少なくとも`normal`、`merge`、`rebase`、`unsupported`/other operationを区別し、未対応operationをnormalとして扱わない。
+RepositoryStateはGitの事実のみを保持し、UI座標・色・animation・HTML・初心者向け説明文を含めない。Gitの事実とUI representationを分離する。Core、Supplemental、Comparisonは分離して取得可能とし、P06時点では未取得のSupplementalを仮値で埋めて最終RepositoryStateを捏造しない。補助情報は`available`、`notConfigured`、`unavailable`を区別する。OperationStateは少なくとも`normal`、`merge`、`rebase`、`unsupported`/other operationを区別し、未対応operationをnormalとして扱わない。
 
 ## 10. Repository Selection
 
@@ -51,6 +51,8 @@ VS CodeのRepository認識を候補として扱い、対象Repositoryを明示�
 ## 12. Remote and Upstream Semantics
 
 `origin/main`などのremote-tracking refをlive Remote branchとして扱わない。Remote情報は「ローカルGitが最後に取得したRemote情報」である。Git Bearingsは自動fetchしない。upstreamの設定有無も事実として表現する。
+
+Remote default branchはlive Remoteへ問い合わせず、locally availableなsymbolic remote-tracking ref等から分かる場合だけ事実として扱う。locally knownなdefault branchがないことはErrorではなく、`main`や`master`を推測しない。upstream設定とbase branchを混同せず、upstream設定が分かっていてもtracking relationだけUnavailableになり得る。
 
 ## 13. Selection and Detail Model
 
@@ -87,6 +89,8 @@ Git 2.23以上を対象とする。MVP正式確認対象はWindows、macOS、Lin
 ## 21. Security Principles
 
 Repositoryの意味的状態を変更しないことを保証する。確認対象はHEAD、refs、Staged内容、Working Tree内容、stash、Git configであり、`.git/index`のbinary内容が一切変化しないことまでは保証対象としない。Git CLIはexecutableとargvで呼び、shellを使わない。WebviewはCSP、エスケープ/安全なDOM API、message validationを最初から用いる。
+
+親processから継承したGit固有environmentによって、選択Repositoryを別Repositoryへredirectさせない。parent processからruntime config injectionを持ち込まない。allowlisted read commandでもRepository config等により外部processを起動し得る場合は安全にneutralizeし、user入力による自由なGit global option injectionを許可しない。
 
 ## 22. MVP Completion Criteria
 

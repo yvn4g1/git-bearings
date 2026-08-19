@@ -96,16 +96,38 @@ export interface BranchComparison {
   readonly behind: number;
 }
 
+export interface LocalBranch {
+  readonly name: string;
+  readonly tipCommitId: string;
+}
+
+export interface RemoteTrackingRef {
+  readonly branchName: string;
+  readonly trackingRef: string;
+  readonly commitId: string;
+}
+
+export interface LocallyKnownRemoteDefaultBranch {
+  readonly branchName: string;
+  readonly trackingRef: string;
+}
+
 export interface Remote {
   readonly name: string;
-  readonly fetchUrl: string | null;
-  readonly pushUrl: string | null;
+  readonly trackingRefs: readonly RemoteTrackingRef[];
+  readonly locallyKnownDefaultBranch: LocallyKnownRemoteDefaultBranch | null;
+}
+
+export interface AheadBehind {
+  readonly ahead: number;
+  readonly behind: number;
 }
 
 export interface Upstream {
   readonly remoteName: string;
   readonly branchName: string;
   readonly trackingRef: string;
+  readonly relation: AvailabilityResult<AheadBehind>;
 }
 
 export interface StashEntry {
@@ -125,16 +147,25 @@ export type OperationState =
   | { readonly kind: "rebase" }
   | { readonly kind: "unsupported"; readonly operationName: string };
 
-export interface RepositoryState {
+export interface CoreRepositoryFacts {
   readonly repository: RepositoryIdentity;
   readonly currentLocation: CurrentLocation;
+  readonly localBranches: readonly LocalBranch[];
   readonly workingTree: WorkingTreeState;
-  readonly comparison: DataResult<BranchComparison>;
+  readonly history: readonly HistoryCommit[];
+  readonly operation: OperationState;
+}
+
+export interface SupplementalRepositoryFacts {
   readonly remotes: DataResult<readonly Remote[]>;
   readonly upstream: DataResult<Upstream>;
-  readonly history: readonly HistoryCommit[];
   readonly stash: AvailabilityResult<readonly StashEntry[]>;
-  readonly operation: OperationState;
+}
+
+export interface RepositoryState
+  extends CoreRepositoryFacts,
+    SupplementalRepositoryFacts {
+  readonly comparison: DataResult<BranchComparison>;
   readonly stateVersion: number;
   readonly refreshedAt: Date;
 }
