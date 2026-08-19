@@ -54,19 +54,24 @@ export class SupplementalRepositoryReader {
   private async readUpstream(repositoryPath: string, coreFacts: Pick<CoreRepositoryFacts, "currentLocation">, refs: Promise<readonly RawRef[]>): Promise<DataResult<Upstream>> {
     const location = coreFacts.currentLocation;
     if (location.kind === "detached") return { kind: "notConfigured" };
+    let upstream: Upstream;
     try {
       const config = location.kind === "unborn"
         ? await this.readUnbornConfig(repositoryPath, location.branchName)
         : await this.readBranchMetadata(repositoryPath, location.branchName);
       if (!config) return { kind: "notConfigured" };
-      const upstream = await this.createUpstream(repositoryPath, config);
-      if (location.kind === "unborn") return available({ ...upstream, relation: unavailable("An unborn branch has no local commit tip.") });
+      upstream = await this.createUpstream(repositoryPath, config);
+    } catch {
+      return unavailable("Upstream configuration could not be read safely.");
+    }
+    if (location.kind === "unborn") return available({ ...upstream, relation: unavailable("An unborn branch has no local commit tip.") });
+    try {
       const tracking = (await refs).find((ref) => ref.refName === upstream.trackingRef && ref.symref === "");
       if (!tracking) return available({ ...upstream, relation: unavailable("The upstream tracking ref is not available locally.") });
       const relation = await this.readRelation(repositoryPath, location.head.id, tracking.commitId);
       return available({ ...upstream, relation });
     } catch {
-      return unavailable("Upstream configuration could not be read safely.");
+      return available({ ...upstream, relation: unavailable("The upstream tracking relation could not be read.") });
     }
   }
 

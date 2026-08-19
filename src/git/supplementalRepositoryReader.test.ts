@@ -33,11 +33,11 @@ test("maps exact, custom, negative, and prefix-colliding fetch refspecs without 
   try {
     await commit(repository, "base.txt", "base\n", "base"); const head = await gitOutput(repository, "rev-parse", "HEAD");
     await git(repository, "remote", "add", "foo", join(repository, "foo.git")); await git(repository, "config", "remote.foo/bar.url", join(repository, "foo-bar.git"));
-    await git(repository, "config", "--unset-all", "remote.foo.fetch"); await git(repository, "config", "--add", "remote.foo.fetch", "+refs/heads/main:refs/custom/foo/main"); await git(repository, "config", "--add", "remote.foo.fetch", "^refs/heads/skip");
+    await git(repository, "config", "--unset-all", "remote.foo.fetch"); await git(repository, "config", "--add", "remote.foo.fetch", "+refs/heads/*:refs/custom/foo/*"); await git(repository, "config", "--add", "remote.foo.fetch", "^refs/heads/skip");
     await git(repository, "config", "--add", "remote.foo/bar.fetch", "refs/heads/release:refs/custom/foo-bar/release");
-    await git(repository, "update-ref", "refs/custom/foo/main", head); await git(repository, "update-ref", "refs/custom/foo/skip", head); await git(repository, "update-ref", "refs/custom/foo-bar/release", head);
+    await git(repository, "update-ref", "refs/custom/foo/main", head); await git(repository, "update-ref", "refs/custom/foo/feature", head); await git(repository, "update-ref", "refs/custom/foo/skip", head); await git(repository, "update-ref", "refs/custom/foo-bar/release", head);
     const facts = await read(repository, normalFacts("main", head)); assert.equal(facts.remotes.kind, "available"); if (facts.remotes.kind === "available") {
-      assert.deepEqual(facts.remotes.value.map((remote) => [remote.name, remote.trackingRefs.map((ref) => ref.trackingRef)]), [["foo", ["refs/custom/foo/main"]], ["foo/bar", ["refs/custom/foo-bar/release"]]]);
+      assert.deepEqual(facts.remotes.value.map((remote) => [remote.name, remote.trackingRefs.map((ref) => ref.trackingRef)]), [["foo", ["refs/custom/foo/feature", "refs/custom/foo/main"]], ["foo/bar", ["refs/custom/foo-bar/release"]]]);
     }
   } finally { await rm(repository, { recursive: true, force: true }); }
 });
@@ -46,11 +46,13 @@ test("represents no remote, detached, unborn upstream configuration, and missing
   const repository = await createRepository();
   try {
     await commit(repository, "base.txt", "base\n", "base"); const head = await gitOutput(repository, "rev-parse", "HEAD");
-    let facts = await read(repository, normalFacts("main", head)); assert.deepEqual(facts.remotes, { kind: "available", value: [] }); assert.deepEqual(facts.upstream, { kind: "notConfigured" });
+    let facts = await read(repository, normalFacts("main", head)); assert.deepEqual(facts.remotes, { kind: "available", value: [] }); assert.deepEqual(facts.upstream, { kind: "notConfigured" }); assert.deepEqual(facts.stash, { kind: "available", value: [] });
     await git(repository, "checkout", "--detach"); facts = await read(repository, detachedFacts(head)); assert.deepEqual(facts.upstream, { kind: "notConfigured" }); await git(repository, "checkout", "main");
     await git(repository, "remote", "add", "origin", join(repository, "remote.git")); await git(repository, "config", "branch.main.remote", "origin"); await git(repository, "config", "branch.main.merge", "refs/heads/missing");
     facts = await read(repository, normalFacts("main", head)); assert.deepEqual(facts.remotes, { kind: "available", value: [{ name: "origin", trackingRefs: [], locallyKnownDefaultBranch: null }] });
     assert.equal(facts.upstream.kind, "available"); if (facts.upstream.kind === "available") assert.equal(facts.upstream.value.relation.kind, "unavailable");
+    await git(repository, "update-ref", "refs/remotes/origin/main", head); await git(repository, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/missing");
+    facts = await read(repository, normalFacts("main", head)); assert.deepEqual(facts.remotes, { kind: "available", value: [{ name: "origin", trackingRefs: [{ branchName: "main", trackingRef: "refs/remotes/origin/main", commitId: head }], locallyKnownDefaultBranch: null }] });
   } finally { await rm(repository, { recursive: true, force: true }); }
 });
 
@@ -80,12 +82,14 @@ test("counts behind and diverged commits with local-only ahead semantics", async
 test("unborn upstream configuration and partial failures stay independent", async () => {
   const process = new FixtureProcessExecutor(); const reader = new SupplementalRepositoryReader(new GitExecutor("git", process, silentLogger));
   const unborn = { currentLocation: { kind: "unborn", branchName: "main", head: null, detached: false } } satisfies Pick<CoreRepositoryFacts, "currentLocation">;
+  let noConfigFacts = await new SupplementalRepositoryReader(new GitExecutor("git", new FixtureProcessExecutor({ unbornConfig: "none" }), silentLogger)).read("/repository", unborn); assert.deepEqual(noConfigFacts.upstream, { kind: "notConfigured" });
   let facts = await reader.read("/repository", unborn); assert.equal(facts.upstream.kind, "available"); if (facts.upstream.kind === "available") assert.equal(facts.upstream.value.relation.kind, "unavailable");
   const remoteFailure = new FixtureProcessExecutor({ fail: "remote" }); facts = await new SupplementalRepositoryReader(new GitExecutor("git", remoteFailure, silentLogger)).read("/repository", unborn); assert.equal(facts.remotes.kind, "unavailable"); assert.equal(facts.stash.kind, "available");
   const stashFailure = new FixtureProcessExecutor({ fail: "stash" }); facts = await new SupplementalRepositoryReader(new GitExecutor("git", stashFailure, silentLogger)).read("/repository", unborn); assert.equal(facts.stash.kind, "unavailable"); assert.equal(facts.upstream.kind, "available");
   const normal = normalFacts("main", idA);
   const upstreamFailure = new FixtureProcessExecutor({ fail: "upstream" }); facts = await new SupplementalRepositoryReader(new GitExecutor("git", upstreamFailure, silentLogger)).read("/repository", normal); assert.equal(facts.upstream.kind, "unavailable"); assert.equal(facts.remotes.kind, "available"); assert.equal(facts.stash.kind, "available");
   const relationFailure = new FixtureProcessExecutor({ fail: "relation" }); facts = await new SupplementalRepositoryReader(new GitExecutor("git", relationFailure, silentLogger)).read("/repository", normal); assert.equal(facts.upstream.kind, "available"); if (facts.upstream.kind === "available") assert.equal(facts.upstream.value.relation.kind, "unavailable");
+  const refsFailure = new FixtureProcessExecutor({ fail: "refs" }); facts = await new SupplementalRepositoryReader(new GitExecutor("git", refsFailure, silentLogger)).read("/repository", normal); assert.equal(facts.remotes.kind, "unavailable"); assert.equal(facts.stash.kind, "available"); assert.equal(facts.upstream.kind, "available"); if (facts.upstream.kind === "available") { assert.equal(facts.upstream.value.remoteName, "origin"); assert.equal(facts.upstream.value.branchName, "main"); assert.equal(facts.upstream.value.trackingRef, "refs/remotes/origin/main"); assert.equal(facts.upstream.value.relation.kind, "unavailable"); }
 });
 
 test("parser rejects ambiguous refspecs and preserves relation direction", () => {
@@ -102,16 +106,16 @@ async function git(repository: string, ...args: string[]): Promise<void> { await
 async function gitOutput(repository: string, ...args: string[]): Promise<string> { return (await execFile("git", args, { cwd: repository })).stdout.trim(); }
 
 class FixtureProcessExecutor implements ProcessExecutor {
-  constructor(private readonly options: { fail?: "remote" | "upstream" | "relation" | "stash" } = {}) {}
+  constructor(private readonly options: { fail?: "remote" | "upstream" | "relation" | "refs" | "stash"; unbornConfig?: "none" } = {}) {}
   async run(request: ProcessRequest): Promise<ProcessResult> {
     const args = request.args; const completed = (stdout: string, exitCode = 0): ProcessResult => ({ kind: "completed", exitCode, stdout, stderr: "" });
     if (args.includes("remote")) return this.options.fail === "remote" ? completed("", 2) : completed("origin\n");
     if (args.includes("stash")) return this.options.fail === "stash" ? completed("", 2) : completed("");
     if (args.includes("^remote\\..*\\.fetch$")) return completed("remote.origin.fetch\n+refs/heads/*:refs/remotes/origin/*\0");
-    if (args.includes("^branch\\..*\\.(remote|merge)$")) return this.options.fail === "upstream" ? completed("", 2) : completed("branch.main.remote\norigin\0branch.main.merge\nrefs/heads/main\0");
+    if (args.includes("^branch\\..*\\.(remote|merge)$")) return this.options.unbornConfig === "none" ? completed("", 1) : this.options.fail === "upstream" ? completed("", 2) : completed("branch.main.remote\norigin\0branch.main.merge\nrefs/heads/main\0");
     if (args.includes("refs/heads/")) return this.options.fail === "upstream" ? completed("", 2) : completed("refs/heads/main\0origin\0refs/heads/main\0refs/remotes/origin/main\0");
     if (args.includes("rev-list")) return this.options.fail === "relation" ? completed("", 2) : completed("0\t0\n");
-    if (args.includes("refs/")) return completed(`${idB}\0refs/remotes/origin/main\0\0`);
+    if (args.includes("refs/")) return this.options.fail === "refs" ? completed("", 2) : completed(`${idB}\0refs/remotes/origin/main\0\0`);
     return completed("");
   }
 }
