@@ -36,6 +36,7 @@ export class GitExecutor {
     private readonly processExecutor: ProcessExecutor,
     private readonly logger: GitLogger,
     private readonly timeoutMs = DEFAULT_GIT_TIMEOUT_MS,
+    private readonly environmentSource: NodeJS.ProcessEnv = process.env,
   ) {}
 
   async execute(
@@ -60,7 +61,7 @@ export class GitExecutor {
       executable: this.executable,
       args: ["--no-pager", ...signature.args],
       cwd: repositoryPath,
-      environment: createGitEnvironment(),
+      environment: createGitEnvironment(this.environmentSource),
       timeoutMs: this.timeoutMs,
     };
     const result = await this.processExecutor.run(request);
@@ -84,9 +85,19 @@ export class GitExecutor {
   }
 }
 
-export function createGitEnvironment(): NodeJS.ProcessEnv {
+export function createGitEnvironment(
+  source: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  const environment: NodeJS.ProcessEnv = {};
+
+  for (const [key, value] of Object.entries(source)) {
+    if (!key.toUpperCase().startsWith("GIT_")) {
+      environment[key] = value;
+    }
+  }
+
   return {
-    ...process.env,
+    ...environment,
     GIT_TERMINAL_PROMPT: "0",
     GIT_OPTIONAL_LOCKS: "0",
     GIT_PAGER: "cat",

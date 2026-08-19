@@ -180,6 +180,33 @@ test("GitExecutor runs only exact allowed signatures with Git environment", asyn
   assert.equal(processExecutor.requests[0].environment.PAGER, "cat");
 });
 
+test("GitExecutor passes a sanitized Git environment to ProcessExecutor", async () => {
+  const processExecutor = new RecordingProcessExecutor();
+  const executor = new GitExecutor(
+    "git",
+    processExecutor,
+    silentLogger,
+    undefined,
+    {
+      GIT_DIR: "/redirected/repository",
+      git_config_parameters: "malicious.config=value",
+      GIT_FUTURE_OVERRIDE: "unexpected",
+      PATH: "/safe/path",
+      CUSTOM_GIT_BEARINGS_TEST_VALUE: "preserved",
+    },
+  );
+
+  await executor.execute(["version"]);
+
+  const environment = processExecutor.requests[0].environment;
+  assert.equal(environment.GIT_DIR, undefined);
+  assert.equal(environment.git_config_parameters, undefined);
+  assert.equal(environment.GIT_FUTURE_OVERRIDE, undefined);
+  assert.equal(environment.PATH, "/safe/path");
+  assert.equal(environment.CUSTOM_GIT_BEARINGS_TEST_VALUE, "preserved");
+  assert.equal(environment.GIT_TERMINAL_PROMPT, "0");
+});
+
 test("GitExecutor requires cwd for repository commands", async () => {
   const processExecutor = new RecordingProcessExecutor();
   const executor = new GitExecutor("git", processExecutor, silentLogger);
@@ -277,8 +304,61 @@ test("GitExecutor reports unavailable when version execution fails", async () =>
   });
 });
 
-test("Git environment disables prompts, locks, and pagers", () => {
-  const environment = createGitEnvironment();
+test("Git environment removes inherited Git-specific variables", () => {
+  const source: NodeJS.ProcessEnv = {
+    GIT_DIR: "/redirected/repository",
+    GIT_WORK_TREE: "/redirected/work-tree",
+    GIT_INDEX_FILE: "/redirected/index",
+    GIT_OBJECT_DIRECTORY: "/redirected/objects",
+    GIT_ALTERNATE_OBJECT_DIRECTORIES: "/redirected/alternate-objects",
+    GIT_COMMON_DIR: "/redirected/common",
+    GIT_NAMESPACE: "redirected-namespace",
+    GIT_CONFIG: "/redirected/config",
+    GIT_CONFIG_GLOBAL: "/redirected/global-config",
+    GIT_CONFIG_SYSTEM: "/redirected/system-config",
+    GIT_CONFIG_PARAMETERS: "malicious.config=value",
+    GIT_CONFIG_COUNT: "1",
+    GIT_CONFIG_KEY_0: "malicious.config",
+    GIT_CONFIG_VALUE_0: "value",
+    GIT_FUTURE_OVERRIDE: "future-value",
+    git_dir: "/mixed-case/repository",
+    Git_Config_Parameters: "mixed-case=value",
+  };
+  const environment = createGitEnvironment(source);
+
+  for (const key of Object.keys(source)) {
+    assert.equal(environment[key], undefined);
+  }
+});
+
+test("Git environment preserves non-Git variables and does not mutate its source", () => {
+  const source: NodeJS.ProcessEnv = {
+    PATH: "/safe/path",
+    HOME: "/safe/home",
+    USERPROFILE: "C:\\Users\\safe",
+    XDG_CONFIG_HOME: "/safe/config",
+    TMPDIR: "/safe/tmp",
+    LANG: "ja_JP.UTF-8",
+    CUSTOM_GIT_BEARINGS_TEST_VALUE: "preserved",
+    GIT_TERMINAL_PROMPT: "1",
+    GIT_OPTIONAL_LOCKS: "1",
+    GIT_PAGER: "malicious-command",
+    PAGER: "malicious-command",
+  };
+  const sourceBefore = { ...source };
+  const environment = createGitEnvironment(source);
+
+  assert.deepEqual(source, sourceBefore);
+  assert.equal(environment.PATH, source.PATH);
+  assert.equal(environment.HOME, source.HOME);
+  assert.equal(environment.USERPROFILE, source.USERPROFILE);
+  assert.equal(environment.XDG_CONFIG_HOME, source.XDG_CONFIG_HOME);
+  assert.equal(environment.TMPDIR, source.TMPDIR);
+  assert.equal(environment.LANG, source.LANG);
+  assert.equal(
+    environment.CUSTOM_GIT_BEARINGS_TEST_VALUE,
+    source.CUSTOM_GIT_BEARINGS_TEST_VALUE,
+  );
 
   assert.equal(environment.GIT_TERMINAL_PROMPT, "0");
   assert.equal(environment.GIT_OPTIONAL_LOCKS, "0");
