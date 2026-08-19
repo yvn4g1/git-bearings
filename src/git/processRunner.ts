@@ -10,6 +10,7 @@ export interface ProcessRequest {
   readonly cwd?: string;
   readonly environment: NodeJS.ProcessEnv;
   readonly timeoutMs: number;
+  readonly stdin?: string | Buffer;
 }
 
 export type ProcessResult =
@@ -44,7 +45,7 @@ export class ProcessRunner implements ProcessExecutor {
           cwd: request.cwd,
           env: request.environment,
           shell: false,
-          stdio: ["ignore", "pipe", "pipe"],
+          stdio: [request.stdin === undefined ? "ignore" : "pipe", "pipe", "pipe"],
         });
       } catch (error) {
         resolve({ kind: "spawnFailed", error: toError(error) });
@@ -106,6 +107,10 @@ export class ProcessRunner implements ProcessExecutor {
         closeExitCode = exitCode;
         finishCompleted();
       });
+
+      if (request.stdin !== undefined) {
+        child.stdin?.end(request.stdin);
+      }
 
       timeout = setTimeout(() => {
         try {

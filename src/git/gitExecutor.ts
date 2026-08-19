@@ -13,21 +13,118 @@ export interface GitLogger {
 
 export type GitExecutionResult =
   | ProcessResult
-  | { readonly kind: "rejected"; readonly reason: "commandNotAllowed" | "cwdRequired" };
+  | {
+      readonly kind: "rejected";
+      readonly reason:
+        | "commandNotAllowed"
+        | "cwdRequired"
+        | "stdinRequired"
+        | "stdinNotAllowed";
+    };
 
 interface CommandSignature {
-  readonly id: "version" | "showTopLevel";
+  readonly id:
+    | "version"
+    | "showTopLevel"
+    | "listIndex"
+    | "listFilterConfig"
+    | "checkFilterAttribute"
+    | "status"
+    | "localBranches"
+    | "history"
+    | "gitPath";
   readonly args: readonly string[];
   readonly requiresCwd: boolean;
+  readonly stdin: "forbidden" | "required";
+  readonly fixedConfigArgs?: readonly string[];
 }
 
 const COMMAND_SIGNATURES: readonly CommandSignature[] = [
-  { id: "version", args: ["version"], requiresCwd: false },
+  { id: "version", args: ["version"], requiresCwd: false, stdin: "forbidden" },
   {
     id: "showTopLevel",
     args: ["rev-parse", "--show-toplevel"],
     requiresCwd: true,
+    stdin: "forbidden",
   },
+  {
+    id: "listIndex",
+    args: ["ls-files", "--stage", "-z"],
+    requiresCwd: true,
+    stdin: "forbidden",
+    fixedConfigArgs: ["-c", "core.fsmonitor="],
+  },
+  {
+    id: "listFilterConfig",
+    args: [
+      "config",
+      "--null",
+      "--name-only",
+      "--get-regexp",
+      "^filter\\..*\\.(clean|process)$",
+      ".+",
+    ],
+    requiresCwd: true,
+    stdin: "forbidden",
+  },
+  {
+    id: "checkFilterAttribute",
+    args: ["check-attr", "--stdin", "-z", "filter"],
+    requiresCwd: true,
+    stdin: "required",
+    fixedConfigArgs: ["-c", "core.fsmonitor="],
+  },
+  {
+    id: "status",
+    args: [
+      "status",
+      "--porcelain=v2",
+      "-z",
+      "--branch",
+      "--untracked-files=all",
+      "--no-ahead-behind",
+      "--renames",
+      "--ignore-submodules=all",
+    ],
+    requiresCwd: true,
+    stdin: "forbidden",
+    fixedConfigArgs: ["-c", "core.fsmonitor="],
+  },
+  {
+    id: "localBranches",
+    args: ["for-each-ref", "--format=%(refname)%09%(objectname)", "refs/heads/"],
+    requiresCwd: true,
+    stdin: "forbidden",
+  },
+  {
+    id: "history",
+    args: [
+      "log",
+      "-z",
+      "--max-count=50",
+      "--topo-order",
+      "--format=format:%H%x00%h%x00%P%x00%s",
+      "HEAD",
+    ],
+    requiresCwd: true,
+    stdin: "forbidden",
+    fixedConfigArgs: ["-c", "log.showSignature=false"],
+  },
+  ...[
+    "rebase-merge",
+    "rebase-apply",
+    "rebase-apply/rebasing",
+    "MERGE_HEAD",
+    "CHERRY_PICK_HEAD",
+    "REVERT_HEAD",
+    "sequencer/todo",
+    "BISECT_START",
+  ].map((path) => ({
+    id: "gitPath" as const,
+    args: ["rev-parse", "--git-path", path],
+    requiresCwd: true,
+    stdin: "forbidden" as const,
+  })),
 ];
 
 export class GitExecutor {
@@ -42,6 +139,7 @@ export class GitExecutor {
   async execute(
     args: readonly string[],
     repositoryPath?: string,
+    stdin?: string | Buffer,
   ): Promise<GitExecutionResult> {
     const signature = findSignature(args);
 
@@ -55,14 +153,23 @@ export class GitExecutor {
       );
       return { kind: "rejected", reason: "cwdRequired" };
     }
+    if (signature.stdin === "required" && stdin === undefined) {
+      this.logger.appendLine("Git command rejected: " + signature.id + " requires stdin.");
+      return { kind: "rejected", reason: "stdinRequired" };
+    }
+    if (signature.stdin === "forbidden" && stdin !== undefined) {
+      this.logger.appendLine("Git command rejected: " + signature.id + " forbids stdin.");
+      return { kind: "rejected", reason: "stdinNotAllowed" };
+    }
 
     const startedAt = Date.now();
     const request: ProcessRequest = {
       executable: this.executable,
-      args: ["--no-pager", ...signature.args],
+      args: ["--no-pager", ...(signature.fixedConfigArgs ?? []), ...signature.args],
       cwd: repositoryPath,
       environment: createGitEnvironment(this.environmentSource),
       timeoutMs: this.timeoutMs,
+      stdin,
     };
     const result = await this.processExecutor.run(request);
     const durationMs = Date.now() - startedAt;

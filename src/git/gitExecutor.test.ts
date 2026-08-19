@@ -128,6 +128,24 @@ test("ProcessRunner explicitly disables the shell", async () => {
   assert.equal(result.kind, "completed");
 });
 
+test("ProcessRunner pipes controlled stdin only when requested", async () => {
+  const runner = new ProcessRunner();
+  const result = await runner.run({
+    executable: "cat",
+    args: [],
+    environment: process.env,
+    timeoutMs: 1_000,
+    stdin: "path\0with spaces\0",
+  });
+
+  assert.deepEqual(result, {
+    kind: "completed",
+    exitCode: 0,
+    stdout: "path\0with spaces\0",
+    stderr: "",
+  });
+});
+
 test("GitExecutor rejects non-allowlisted and write signatures before spawn", async () => {
   const processExecutor = new RecordingProcessExecutor();
   const executor = new GitExecutor("git", processExecutor, silentLogger);
@@ -215,6 +233,33 @@ test("GitExecutor requires cwd for repository commands", async () => {
 
   assert.deepEqual(result, { kind: "rejected", reason: "cwdRequired" });
   assert.equal(processExecutor.requests.length, 0);
+});
+
+test("GitExecutor restricts stdin and applies signature-specific fixed config", async () => {
+  const processExecutor = new RecordingProcessExecutor();
+  const executor = new GitExecutor("git", processExecutor, silentLogger);
+  const filterArgs = ["check-attr", "--stdin", "-z", "filter"] as const;
+
+  assert.deepEqual(await executor.execute(filterArgs, "/repository"), {
+    kind: "rejected", reason: "stdinRequired",
+  });
+  assert.deepEqual(await executor.execute(["version"], undefined, "input"), {
+    kind: "rejected", reason: "stdinNotAllowed",
+  });
+  await executor.execute(filterArgs, "/repository", "path\0");
+  await executor.execute([
+    "status", "--porcelain=v2", "-z", "--branch", "--untracked-files=all",
+    "--no-ahead-behind", "--renames", "--ignore-submodules=all",
+  ], "/repository");
+  await executor.execute([
+    "log", "-z", "--max-count=50", "--topo-order",
+    "--format=format:%H%x00%h%x00%P%x00%s", "HEAD",
+  ], "/repository");
+
+  assert.deepEqual(processExecutor.requests[0].args.slice(0, 3), ["--no-pager", "-c", "core.fsmonitor="]);
+  assert.equal(processExecutor.requests[0].stdin, "path\0");
+  assert.deepEqual(processExecutor.requests[1].args.slice(0, 3), ["--no-pager", "-c", "core.fsmonitor="]);
+  assert.deepEqual(processExecutor.requests[2].args.slice(0, 3), ["--no-pager", "-c", "log.showSignature=false"]);
 });
 
 test("Git version support parses integer components and platform suffixes", () => {
