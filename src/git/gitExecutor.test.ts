@@ -129,10 +129,24 @@ test("ProcessRunner explicitly disables the shell", async () => {
 });
 
 test("ProcessRunner pipes controlled stdin only when requested", async () => {
-  const runner = new ProcessRunner();
+  let capturedOptions: SpawnOptions | undefined;
+  const child = createFakeChild();
+  const stdin = new PassThrough();
+  Object.assign(child, { stdin });
+  stdin.once("finish", () => {
+    child.stdout.end("path\0with spaces\0");
+    child.stderr.end();
+    child.emit("close", 0);
+  });
+  const runner = new ProcessRunner(((executable, args, options) => {
+    void executable;
+    void args;
+    capturedOptions = options;
+    return child as unknown as ChildProcess;
+  }) satisfies SpawnProcess);
   const result = await runner.run({
-    executable: "cat",
-    args: [],
+    executable: process.execPath,
+    args: ["--eval", "process.stdin.pipe(process.stdout)"],
     environment: process.env,
     timeoutMs: 1_000,
     stdin: "path\0with spaces\0",
@@ -144,6 +158,7 @@ test("ProcessRunner pipes controlled stdin only when requested", async () => {
     stdout: "path\0with spaces\0",
     stderr: "",
   });
+  assert.equal(capturedOptions?.stdio?.[0], "pipe");
 });
 
 test("GitExecutor rejects non-allowlisted and write signatures before spawn", async () => {

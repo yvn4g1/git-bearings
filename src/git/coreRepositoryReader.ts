@@ -52,10 +52,19 @@ const OPERATION_PATHS = [
 ] as const;
 
 export class CoreRepositoryReader {
+  private supportedGitVersion = false;
+
   constructor(private readonly gitExecutor: GitExecutor) {}
 
   async read(repositoryPath: string): Promise<AvailabilityResult<CoreRepositoryFacts>> {
     try {
+      if (!this.supportedGitVersion) {
+        const version = await this.gitExecutor.checkVersion();
+        if (version.kind !== "supported") {
+          return unavailable("Git 2.23 or newer is required for Core repository reading.");
+        }
+        this.supportedGitVersion = true;
+      }
       const repositoryRoot = await this.readRepositoryRoot(repositoryPath);
       const index = await this.execute(["ls-files", "--stage", "-z"], repositoryPath);
       const trackedPaths = parseIndexEntries(index.stdout);
@@ -279,10 +288,18 @@ function parseRenameRecord(record: string, originalPath: string, workingTree: Mu
   const submodule = fields[2];
   const score = fields[8];
   const path = fields[9];
-  if (!xy || !path || !originalPath || submodule !== "N..." || !/^[RC]\d+$/.test(score)) throw new Error("Invalid rename status record.");
+  if (!xy || xy.length !== 2 || !path || !originalPath || submodule !== "N..." || !/^[RC]\d+$/.test(score)) throw new Error("Invalid rename status record.");
   const kind = score[0] === "R" ? "renamed" : "copied";
-  if (xy[0] !== ".") workingTree.staged.push({ path, originalPath, kind });
-  if (xy[1] !== ".") workingTree.unstaged.push({ path, originalPath, kind });
+  if (xy[0] !== score[0]) throw new Error("Rename score and staged status do not match.");
+  workingTree.staged.push({ path, originalPath, kind });
+  if (xy[1] !== ".") {
+    if (xy[1] === "R" || xy[1] === "C") {
+      if (xy[1] !== score[0]) throw new Error("Rename score and unstaged status do not match.");
+      workingTree.unstaged.push({ path, originalPath, kind });
+    } else {
+      workingTree.unstaged.push({ path, kind: ordinaryChangeKind(xy[1]) });
+    }
+  }
 }
 
 function parseConflictRecord(record: string, workingTree: MutableWorkingTree): void {

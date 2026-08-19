@@ -30,7 +30,7 @@ test("porcelain v2 parser handles branch, changes, rename, untracked, and confli
     `# branch.oid ${commitId}`,
     "# branch.head main",
     `1 MM N... 100644 100644 100644 ${commitId} ${commitId} space name.txt`,
-    `2 R. N... 100644 100644 100644 ${commitId} ${commitId} R100 renamed.txt`,
+    `2 RM N... 100644 100644 100644 ${commitId} ${commitId} R100 renamed.txt`,
     "original name.txt",
     "? untracked 日本語.txt",
     ...conflictRecords,
@@ -46,6 +46,7 @@ test("porcelain v2 parser handles branch, changes, rename, untracked, and confli
   ]);
   assert.deepEqual(status.workingTree.unstaged, [
     { path: "space name.txt", kind: "modified" },
+    { path: "renamed.txt", kind: "modified" },
   ]);
   assert.deepEqual(status.workingTree.untracked, ["untracked 日本語.txt"]);
   assert.deepEqual(
@@ -54,6 +55,7 @@ test("porcelain v2 parser handles branch, changes, rename, untracked, and confli
   );
   assert.throws(() => parsePorcelainV2(`# branch.oid ${commitId}\0# branch.head main\0x unknown\0`));
   assert.throws(() => parsePorcelainV2(`# branch.oid ${commitId}\0# branch.head main\0${"1"} M. S... 1 1 1 ${commitId} ${commitId} submodule\0`));
+  assert.throws(() => parsePorcelainV2(`# branch.oid ${commitId}\0# branch.head main\0${"2"} M. N... 1 1 1 ${commitId} ${commitId} R100 renamed\0original\0`));
 });
 
 test("porcelain v2 parser handles detached and unborn states", () => {
@@ -96,6 +98,21 @@ test("CoreRepositoryReader reads core facts and preserves staged and unstaged ch
     assert.deepEqual(result.value.workingTree.staged, [{ path: "tracked file.txt", kind: "modified" }]);
     assert.deepEqual(result.value.workingTree.unstaged, [{ path: "tracked file.txt", kind: "modified" }]);
     assert.deepEqual(result.value.workingTree.untracked, ["untracked 日本語.txt"]);
+  } finally { await rm(repository, { recursive: true, force: true }); }
+});
+
+test("CoreRepositoryReader represents a staged rename with an unstaged modification", async () => {
+  const repository = await createRepository();
+  try {
+    await commitFile(repository, "a.txt", "one\n", "root");
+    await git(repository, "mv", "a.txt", "b.txt");
+    await writeFile(join(repository, "b.txt"), "two\n");
+    const result = await readCore(repository);
+    assert.equal(result.kind, "available");
+    if (result.kind === "available") {
+      assert.deepEqual(result.value.workingTree.staged, [{ path: "b.txt", originalPath: "a.txt", kind: "renamed" }]);
+      assert.deepEqual(result.value.workingTree.unstaged, [{ path: "b.txt", kind: "modified" }]);
+    }
   } finally { await rm(repository, { recursive: true, force: true }); }
 });
 
@@ -184,7 +201,8 @@ async function readCore(repository: string) {
 
 async function createRepository(): Promise<string> {
   const repository = await mkdtemp(join(tmpdir(), "git-bearings-core-"));
-  await git(repository, "init", "-b", "main");
+  await git(repository, "init");
+  await git(repository, "symbolic-ref", "HEAD", "refs/heads/main");
   await git(repository, "config", "user.name", "Git Bearings Test");
   await git(repository, "config", "user.email", "test@example.invalid");
   return repository;

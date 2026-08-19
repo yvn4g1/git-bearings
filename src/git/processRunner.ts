@@ -109,6 +109,14 @@ export class ProcessRunner implements ProcessExecutor {
       });
 
       if (request.stdin !== undefined) {
+        child.stdin?.once("error", (error) => {
+          try {
+            child.kill("SIGTERM");
+          } catch {
+            // The I/O failure result takes precedence.
+          }
+          finish({ kind: "spawnFailed", error: toError(error) });
+        });
         child.stdin?.end(request.stdin);
       }
 
