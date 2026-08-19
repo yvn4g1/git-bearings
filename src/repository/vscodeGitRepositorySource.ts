@@ -7,8 +7,19 @@ export class VscodeGitRepositorySource implements DisposableLike {
   constructor(private readonly getApi: () => Promise<GitApiLike>, private readonly onCandidates: (candidates: readonly RepositoryCandidate[]) => void, private readonly onUnavailable: (reason: string) => void) {}
   async initialize(): Promise<void> {
     try {
-      const api = await this.getApi(); const refresh = () => this.onCandidates(toCandidates(api.repositories)); const refreshWhenInitialized = () => { if (api.state === "initialized") refresh(); };
-      this.subscriptions.push(api.onDidOpenRepository(refresh), api.onDidCloseRepository(refresh), api.onDidChangeState(refreshWhenInitialized)); refreshWhenInitialized();
+      const api = await this.getApi();
+      await new Promise<void>((resolve) => {
+        let initialized = false;
+        const refresh = () => { if (initialized) this.onCandidates(toCandidates(api.repositories)); };
+        const markInitialized = () => {
+          if (api.state !== "initialized" || initialized) return;
+          initialized = true;
+          refresh();
+          resolve();
+        };
+        this.subscriptions.push(api.onDidOpenRepository(refresh), api.onDidCloseRepository(refresh), api.onDidChangeState(markInitialized));
+        markInitialized();
+      });
     } catch (error) { this.onUnavailable(error instanceof Error ? error.message : "VS Code Git API is unavailable"); }
   }
   dispose(): void { for (const subscription of this.subscriptions) subscription.dispose(); }
