@@ -198,6 +198,12 @@ test("GitExecutor rejects non-allowlisted and write signatures before spawn", as
     ["merge", "main"],
     ["rebase", "main"],
     ["stash", "pop"],
+    ["stash", "apply"],
+    ["stash", "push"],
+    ["remote", "-v"],
+    ["for-each-ref", "--format=%(refname)", "refs/"],
+    ["config", "--get-regexp", ".*"],
+    ["rev-list", "--left-right", "--count", "HEAD...origin/main"],
     ["--exec-path=/tmp", "version"],
     ["-c", "core.pager=cat", "version"],
   ]) {
@@ -233,6 +239,24 @@ test("GitExecutor runs only exact allowed signatures with Git environment", asyn
   assert.equal(processExecutor.requests[0].environment.GIT_OPTIONAL_LOCKS, "0");
   assert.equal(processExecutor.requests[0].environment.GIT_PAGER, "cat");
   assert.equal(processExecutor.requests[0].environment.PAGER, "cat");
+});
+
+test("GitExecutor permits only the fixed supplemental-reader signatures", async () => {
+  const processExecutor = new RecordingProcessExecutor();
+  const executor = new GitExecutor("git", processExecutor, silentLogger);
+  const relationInput = "a".repeat(40) + "..." + "b".repeat(40) + "\n";
+  for (const [args, stdin] of [
+    [["remote"], undefined],
+    [["config", "--null", "--get-regexp", "^remote\\..*\\.fetch$"], undefined],
+    [["for-each-ref", "--format=%(objectname)%00%(refname)%00%(symref)%00", "refs/"], undefined],
+    [["for-each-ref", "--format=%(refname)%00%(upstream:remotename)%00%(upstream:remoteref)%00%(upstream)%00", "refs/heads/"], undefined],
+    [["config", "--null", "--get-regexp", "^branch\\..*\\.(remote|merge)$"], undefined],
+    [["rev-list", "--left-right", "--count", "--stdin"], relationInput],
+    [["stash", "list", "--format=%gd%x00%H%x00%gs%x00"], undefined],
+  ] as const) await executor.execute(args, "/repository", stdin);
+  assert.equal(processExecutor.requests.length, 7);
+  assert.equal(processExecutor.requests[5].stdin, relationInput);
+  assert.deepEqual(processExecutor.requests[6].args.slice(0, 3), ["--no-pager", "-c", "log.showSignature=false"]);
 });
 
 test("GitExecutor passes a sanitized Git environment to ProcessExecutor", async () => {
@@ -288,6 +312,8 @@ test("GitExecutor restricts stdin and applies signature-specific fixed config", 
     "status", "--porcelain=v2", "-z", "--branch", "--untracked-files=all",
     "--no-ahead-behind", "--renames", "--ignore-submodules=all",
   ], "/repository");
+  await executor.execute(["rev-list", "--left-right", "--count", "--stdin"], "/repository", "a".repeat(40) + "..." + "b".repeat(40) + "\n");
+  await executor.execute(["stash", "list", "--format=%gd%x00%H%x00%gs%x00"], "/repository");
   await executor.execute([
     "log", "-z", "--max-count=50", "--topo-order",
     "--format=format:%H%x00%h%x00%P%x00%s", "HEAD",
@@ -296,7 +322,9 @@ test("GitExecutor restricts stdin and applies signature-specific fixed config", 
   assert.deepEqual(processExecutor.requests[0].args.slice(0, 3), ["--no-pager", "-c", "core.fsmonitor="]);
   assert.equal(processExecutor.requests[0].stdin, "path\0");
   assert.deepEqual(processExecutor.requests[1].args.slice(0, 3), ["--no-pager", "-c", "core.fsmonitor="]);
-  assert.deepEqual(processExecutor.requests[2].args.slice(0, 3), ["--no-pager", "-c", "log.showSignature=false"]);
+  assert.equal(processExecutor.requests[2].stdin, "a".repeat(40) + "..." + "b".repeat(40) + "\n");
+  assert.deepEqual(processExecutor.requests[3].args.slice(0, 3), ["--no-pager", "-c", "log.showSignature=false"]);
+  assert.deepEqual(processExecutor.requests[4].args.slice(0, 3), ["--no-pager", "-c", "log.showSignature=false"]);
 });
 
 test("Git version support parses integer components and platform suffixes", () => {

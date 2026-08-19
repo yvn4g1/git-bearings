@@ -39,6 +39,7 @@
     "test:git-executor": "npm run compile && node --test out/git/gitExecutor.test.js",
     "test:core-reader": "npm run compile && node --test out/git/coreRepositoryReader.test.js",
     "test:repository-selection": "npm run compile && node --test out/domain/appViewStateStore.test.js out/repository/*.test.js",
+    "test:supplemental-reader": "npm run compile && node --test out/git/supplementalRepositoryReader.test.js",
     "vscode:prepublish": "npm run compile"
   },
   "devDependencies": {

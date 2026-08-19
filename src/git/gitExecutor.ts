@@ -32,7 +32,14 @@ interface CommandSignature {
     | "status"
     | "localBranches"
     | "history"
-    | "gitPath";
+    | "gitPath"
+    | "remoteNames"
+    | "remoteFetchRefspecs"
+    | "allRefs"
+    | "branchUpstreamMetadata"
+    | "unbornBranchUpstreamConfig"
+    | "upstreamRelation"
+    | "stashList";
   readonly args: readonly string[];
   readonly requiresCwd: boolean;
   readonly stdin: "forbidden" | "required";
@@ -106,6 +113,44 @@ const COMMAND_SIGNATURES: readonly CommandSignature[] = [
       "--format=format:%H%x00%h%x00%P%x00%s",
       "HEAD",
     ],
+    requiresCwd: true,
+    stdin: "forbidden",
+    fixedConfigArgs: ["-c", "log.showSignature=false"],
+  },
+  { id: "remoteNames", args: ["remote"], requiresCwd: true, stdin: "forbidden" },
+  {
+    id: "remoteFetchRefspecs",
+    args: ["config", "--null", "--get-regexp", "^remote\\..*\\.fetch$"],
+    requiresCwd: true,
+    stdin: "forbidden",
+  },
+  {
+    id: "allRefs",
+    args: ["for-each-ref", "--format=%(objectname)%00%(refname)%00%(symref)%00", "refs/"],
+    requiresCwd: true,
+    stdin: "forbidden",
+  },
+  {
+    id: "branchUpstreamMetadata",
+    args: ["for-each-ref", "--format=%(refname)%00%(upstream:remotename)%00%(upstream:remoteref)%00%(upstream)%00", "refs/heads/"],
+    requiresCwd: true,
+    stdin: "forbidden",
+  },
+  {
+    id: "unbornBranchUpstreamConfig",
+    args: ["config", "--null", "--get-regexp", "^branch\\..*\\.(remote|merge)$"],
+    requiresCwd: true,
+    stdin: "forbidden",
+  },
+  {
+    id: "upstreamRelation",
+    args: ["rev-list", "--left-right", "--count", "--stdin"],
+    requiresCwd: true,
+    stdin: "required",
+  },
+  {
+    id: "stashList",
+    args: ["stash", "list", "--format=%gd%x00%H%x00%gs%x00"],
     requiresCwd: true,
     stdin: "forbidden",
     fixedConfigArgs: ["-c", "log.showSignature=false"],
