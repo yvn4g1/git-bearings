@@ -39,7 +39,11 @@ interface CommandSignature {
     | "branchUpstreamMetadata"
     | "unbornBranchUpstreamConfig"
     | "upstreamRelation"
-    | "stashList";
+    | "stashList"
+    | "shallowRepository"
+    | "comparisonMergeBase"
+    | "comparisonHistory"
+    | "comparisonAnchors";
   readonly args: readonly string[];
   readonly requiresCwd: boolean;
   readonly stdin: "forbidden" | "required";
@@ -147,6 +151,39 @@ const COMMAND_SIGNATURES: readonly CommandSignature[] = [
     args: ["rev-list", "--left-right", "--count", "--stdin"],
     requiresCwd: true,
     stdin: "required",
+  },
+  {
+    id: "shallowRepository",
+    args: ["rev-parse", "--is-shallow-repository"],
+    requiresCwd: true,
+    stdin: "forbidden",
+  },
+  {
+    id: "comparisonHistory",
+    args: [
+      "log",
+      "-z",
+      "--max-count=50",
+      "--topo-order",
+      "--format=format:%H%x00%h%x00%P%x00%s",
+      "--stdin",
+    ],
+    requiresCwd: true,
+    stdin: "required",
+    fixedConfigArgs: ["-c", "log.showSignature=false"],
+  },
+  {
+    id: "comparisonAnchors",
+    args: [
+      "log",
+      "-z",
+      "--no-walk",
+      "--format=format:%H%x00%h%x00%P%x00%s",
+      "--stdin",
+    ],
+    requiresCwd: true,
+    stdin: "required",
+    fixedConfigArgs: ["-c", "log.showSignature=false"],
   },
   {
     id: "stashList",
@@ -258,11 +295,33 @@ export function createGitEnvironment(
 }
 
 function findSignature(args: readonly string[]): CommandSignature | undefined {
-  return COMMAND_SIGNATURES.find(
+  const exact = COMMAND_SIGNATURES.find(
     (signature) =>
       signature.args.length === args.length &&
       signature.args.every((argument, index) => argument === args[index]),
   );
+  if (exact) return exact;
+
+  if (
+    args.length === 4 &&
+    args[0] === "merge-base" &&
+    args[1] === "--all" &&
+    isFullOid(args[2]) &&
+    isFullOid(args[3])
+  ) {
+    return {
+      id: "comparisonMergeBase",
+      args,
+      requiresCwd: true,
+      stdin: "forbidden",
+    };
+  }
+
+  return undefined;
+}
+
+function isFullOid(value: string | undefined): value is string {
+  return value !== undefined && /^[0-9a-f]{40}$/.test(value);
 }
 
 function formatResultLog(

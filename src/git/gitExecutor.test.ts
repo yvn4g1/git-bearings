@@ -259,6 +259,70 @@ test("GitExecutor permits only the fixed supplemental-reader signatures", async 
   assert.deepEqual(processExecutor.requests[6].args.slice(0, 3), ["--no-pager", "-c", "log.showSignature=false"]);
 });
 
+test("GitExecutor permits only constrained comparison signatures", async () => {
+  const processExecutor = new RecordingProcessExecutor();
+  const executor = new GitExecutor("git", processExecutor, silentLogger);
+  const a = "a".repeat(40);
+  const b = "b".repeat(40);
+  const historyArgs = [
+    "log", "-z", "--max-count=50", "--topo-order",
+    "--format=format:%H%x00%h%x00%P%x00%s", "--stdin",
+  ] as const;
+  const anchorArgs = [
+    "log", "-z", "--no-walk",
+    "--format=format:%H%x00%h%x00%P%x00%s", "--stdin",
+  ] as const;
+
+  await executor.execute(["merge-base", "--all", a, b], "/repository");
+  await executor.execute(["rev-parse", "--is-shallow-repository"], "/repository");
+  await executor.execute(historyArgs, "/repository", `${a}\n${b}\n`);
+  await executor.execute(anchorArgs, "/repository", `${a}\n`);
+
+  assert.equal(processExecutor.requests.length, 4);
+  assert.deepEqual(processExecutor.requests[0].args, ["--no-pager", "merge-base", "--all", a, b]);
+  assert.deepEqual(processExecutor.requests[2].args.slice(0, 3), ["--no-pager", "-c", "log.showSignature=false"]);
+  assert.deepEqual(processExecutor.requests[3].args.slice(0, 3), ["--no-pager", "-c", "log.showSignature=false"]);
+});
+
+test("GitExecutor rejects near-match comparison commands", async () => {
+  const processExecutor = new RecordingProcessExecutor();
+  const executor = new GitExecutor("git", processExecutor, silentLogger);
+  const a = "a".repeat(40);
+  const b = "b".repeat(40);
+  const rejected = [
+    ["merge-base", "--all", "HEAD", b],
+    ["merge-base", "--all", "main", b],
+    ["merge-base", "--all", "abc123", b],
+    ["merge-base", "--all", "a".repeat(39), b],
+    ["merge-base", "--all", "a".repeat(41), b],
+    ["merge-base", "--all", "A".repeat(40), b],
+    ["merge-base", a, b],
+    ["merge-base", "--octopus", a, b],
+    ["merge-base", "--is-ancestor", a, b],
+    ["merge-base", "--all", a],
+    ["merge-base", "--all", a, b, "c".repeat(40)],
+    ["rev-parse", "--is-shallow-repository", "--quiet"],
+    ["log", "-z", "--max-count=50", "--topo-order", "--format=%H", "--stdin"],
+    ["log", "-z", "--max-count=50", "--topo-order", "--format=format:%H%x00%h%x00%P%x00%s", "--all", "--stdin"],
+    ["log", "-z", "--max-count=50", "--topo-order", "--format=format:%H%x00%h%x00%P%x00%s", "--stdin", "HEAD"],
+    ["log", "-z", "--max-count=50", "--topo-order", "--format=format:%H%x00%h%x00%P%x00%s", "main"],
+    ["log", "-z", "--no-walk", "--format=format:%H%x00%h%x00%P%x00%s", a],
+  ];
+  for (const args of rejected) {
+    assert.deepEqual(await executor.execute(args, "/repository"), {
+      kind: "rejected", reason: "commandNotAllowed",
+    }, args.join(" "));
+  }
+  assert.deepEqual(await executor.execute([
+    "log", "-z", "--max-count=50", "--topo-order",
+    "--format=format:%H%x00%h%x00%P%x00%s", "--stdin",
+  ], "/repository"), { kind: "rejected", reason: "stdinRequired" });
+  assert.deepEqual(await executor.execute([
+    "log", "-z", "--no-walk", "--format=format:%H%x00%h%x00%P%x00%s", "--stdin",
+  ], "/repository"), { kind: "rejected", reason: "stdinRequired" });
+  assert.equal(processExecutor.requests.length, 0);
+});
+
 test("GitExecutor passes a sanitized Git environment to ProcessExecutor", async () => {
   const processExecutor = new RecordingProcessExecutor();
   const executor = new GitExecutor(
