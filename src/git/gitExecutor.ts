@@ -19,7 +19,8 @@ export type GitExecutionResult =
         | "commandNotAllowed"
         | "cwdRequired"
         | "stdinRequired"
-        | "stdinNotAllowed";
+        | "stdinNotAllowed"
+        | "stdinInvalid";
     };
 
 interface CommandSignature {
@@ -47,6 +48,7 @@ interface CommandSignature {
   readonly args: readonly string[];
   readonly requiresCwd: boolean;
   readonly stdin: "forbidden" | "required";
+  readonly validateStdin?: (stdin: string | Buffer) => boolean;
   readonly fixedConfigArgs?: readonly string[];
 }
 
@@ -151,6 +153,7 @@ const COMMAND_SIGNATURES: readonly CommandSignature[] = [
     args: ["rev-list", "--left-right", "--count", "--stdin"],
     requiresCwd: true,
     stdin: "required",
+    validateStdin: isUpstreamRelationStdin,
   },
   {
     id: "shallowRepository",
@@ -170,6 +173,7 @@ const COMMAND_SIGNATURES: readonly CommandSignature[] = [
     ],
     requiresCwd: true,
     stdin: "required",
+    validateStdin: isComparisonHistoryStdin,
     fixedConfigArgs: ["-c", "log.showSignature=false"],
   },
   {
@@ -183,6 +187,7 @@ const COMMAND_SIGNATURES: readonly CommandSignature[] = [
     ],
     requiresCwd: true,
     stdin: "required",
+    validateStdin: isComparisonAnchorsStdin,
     fixedConfigArgs: ["-c", "log.showSignature=false"],
   },
   {
@@ -242,6 +247,10 @@ export class GitExecutor {
     if (signature.stdin === "forbidden" && stdin !== undefined) {
       this.logger.appendLine("Git command rejected: " + signature.id + " forbids stdin.");
       return { kind: "rejected", reason: "stdinNotAllowed" };
+    }
+    if (stdin !== undefined && signature.validateStdin && !signature.validateStdin(stdin)) {
+      this.logger.appendLine("Git command rejected: " + signature.id + " has invalid stdin.");
+      return { kind: "rejected", reason: "stdinInvalid" };
     }
 
     const startedAt = Date.now();
@@ -323,6 +332,20 @@ function findSignature(args: readonly string[]): CommandSignature | undefined {
 function isFullOid(value: string | undefined): value is string {
   return value !== undefined && /^[0-9a-f]{40}$/.test(value);
 }
+
+function isUpstreamRelationStdin(stdin: string | Buffer): boolean {
+  return typeof stdin === "string" && new RegExp(`^${FULL_OID}\\.\\.\\.${FULL_OID}\\n$`).test(stdin);
+}
+
+function isComparisonHistoryStdin(stdin: string | Buffer): boolean {
+  return typeof stdin === "string" && new RegExp(`^(?:${FULL_OID}\\n){2}$`).test(stdin);
+}
+
+function isComparisonAnchorsStdin(stdin: string | Buffer): boolean {
+  return typeof stdin === "string" && new RegExp(`^(?:${FULL_OID}\\n){1,3}$`).test(stdin);
+}
+
+const FULL_OID = "[0-9a-f]{40}";
 
 function formatResultLog(
   signature: CommandSignature["id"],

@@ -284,6 +284,62 @@ test("GitExecutor permits only constrained comparison signatures", async () => {
   assert.deepEqual(processExecutor.requests[3].args.slice(0, 3), ["--no-pager", "-c", "log.showSignature=false"]);
 });
 
+test("GitExecutor rejects invalid comparison stdin before spawn", async () => {
+  const a = "a".repeat(40);
+  const b = "b".repeat(40);
+  const historyArgs = [
+    "log", "-z", "--max-count=50", "--topo-order",
+    "--format=format:%H%x00%h%x00%P%x00%s", "--stdin",
+  ] as const;
+  const anchorArgs = [
+    "log", "-z", "--no-walk",
+    "--format=format:%H%x00%h%x00%P%x00%s", "--stdin",
+  ] as const;
+  const cases: readonly [readonly string[], readonly (string | Buffer)[]][] = [
+    [historyArgs, [
+      "HEAD\n", "main\n", `${a}..${b}\n`, "--\npath\n", `${a}\n--\npath\n`,
+      `${a}\n${b}\n${"c".repeat(40)}\n`, `${a.toUpperCase()}\n${b}\n`,
+      `${a.slice(1)}\n${b}\n`, `${a}a\n${b}\n`, `${a}\n${b}`,
+      Buffer.from(`${a}\n${b}\n`),
+    ]],
+    [anchorArgs, [
+      "HEAD\n", "--\n", "--\npath\n", "not-an-oid\n",
+      `${a}\n${b}\n${"c".repeat(40)}\n${"d".repeat(40)}\n`,
+      "main@{upstream}\n", Buffer.from(`${a}\n`),
+    ]],
+    [["rev-list", "--left-right", "--count", "--stdin"], [
+      `HEAD...${b}\n`, `${a}...main\n`, `${a}..${b}\n`, `${a}...${b}\n--\n`,
+      `${a}...${b}\nextra\n`, `${a.toUpperCase()}...${b}\n`,
+      `${a.slice(1)}...${b}\n`, Buffer.from(`${a}...${b}\n`),
+    ]],
+  ];
+
+  for (const [args, inputs] of cases) {
+    const processExecutor = new RecordingProcessExecutor();
+    const executor = new GitExecutor("git", processExecutor, silentLogger);
+    for (const stdin of inputs) {
+      assert.deepEqual(await executor.execute(args, "/repository", stdin), {
+        kind: "rejected", reason: "stdinInvalid",
+      });
+    }
+    assert.equal(processExecutor.requests.length, 0);
+  }
+});
+
+test("GitExecutor keeps NUL-safe Buffer stdin available for check-attr", async () => {
+  const processExecutor = new RecordingProcessExecutor();
+  const executor = new GitExecutor("git", processExecutor, silentLogger);
+  const stdin = Buffer.from("path\0");
+  const result = await executor.execute(
+    ["check-attr", "--stdin", "-z", "filter"],
+    "/repository",
+    stdin,
+  );
+  assert.equal(result.kind, "completed");
+  assert.equal(processExecutor.requests.length, 1);
+  assert.equal(processExecutor.requests[0].stdin, stdin);
+});
+
 test("GitExecutor rejects near-match comparison commands", async () => {
   const processExecutor = new RecordingProcessExecutor();
   const executor = new GitExecutor("git", processExecutor, silentLogger);
