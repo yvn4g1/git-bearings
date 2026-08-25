@@ -17,6 +17,7 @@ import { BranchComparisonReader } from "./git/branchComparisonReader";
 import { RepositoryStateReader } from "./repository/repositoryStateReader";
 import { BasePreferenceController, BASE_PREFERENCE_KEY } from "./repository/basePreference";
 import { createBaseSelectionCandidates } from "./repository/baseSelection";
+import { matchesSnapshotTarget, RepositoryStateSnapshotStore } from "./ui/repositoryStateSnapshot";
 
 const selectedRepositoryKey = "gitBearings.selectedRepository";
 
@@ -24,17 +25,20 @@ interface GitExtensionExports { getAPI(version: 1): GitApiLike; }
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const outputChannel = vscode.window.createOutputChannel("Git Bearings");
-  const sidebar = createGitBearingsSidebar();
+  const snapshotStore = new RepositoryStateSnapshotStore();
+  const sidebar = createGitBearingsSidebar(snapshotStore);
   const gitMapPanel = new GitMapPanel();
   const appViewState = new AppViewStateStore<unknown>();
   const basePreference = new BasePreferenceController({
     read: () => context.workspaceState.get<unknown>(BASE_PREFERENCE_KEY),
     write: (value) => context.workspaceState.update(BASE_PREFERENCE_KEY, value),
   });
+  let publishSelectedState: () => Promise<void> = async () => undefined;
   const selection = new RepositorySelectionController({
     rememberedId: () => context.workspaceState.get<string>(selectedRepositoryKey),
     remember: (id) => { void context.workspaceState.update(selectedRepositoryKey, id); },
     resetViewState: () => appViewState.resetForRepositoryChange(),
+    onDidChange: () => { void publishSelectedState(); },
     onDidAutoSelectAfterSelectionLost: (repository) => {
       void vscode.window.showInformationMessage(`選択中のRepositoryが利用できなくなったため、${repository.rootPath} に切り替えました。`);
     },
@@ -52,13 +56,29 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   const readSelectedState = async () => {
     const selected = selection.currentState;
-    if (selected.kind !== "selected" || !stateReader) return undefined;
-    return stateReader.read(
-      selected.repository.rootPath,
-      basePreference.get(selected.repository.id),
+    if (selected.kind !== "selected") {
+      snapshotStore.clear();
+      return undefined;
+    }
+    const repository = selected.repository;
+    if (!stateReader) {
+      snapshotStore.set({ kind: "unavailable", repositoryId: repository.id, rootPath: repository.rootPath, reason: gitUnavailableReason ?? "Git executable is unavailable." });
+      return undefined;
+    }
+    snapshotStore.set({ kind: "loading", repositoryId: repository.id, rootPath: repository.rootPath });
+    const result = await stateReader.read(
+      repository.rootPath,
+      basePreference.get(repository.id),
       { stateVersion: 1, refreshedAt: new Date() },
     );
+    const current = selection.currentState;
+    const currentRepository = current.kind === "selected" ? current.repository : undefined;
+    if (!matchesSnapshotTarget(currentRepository, repository.id, repository.rootPath)) return result;
+    if (result.kind === "available") snapshotStore.set({ kind: "available", repositoryId: repository.id, state: result.value });
+    else snapshotStore.set({ kind: "unavailable", repositoryId: repository.id, rootPath: repository.rootPath, reason: result.reason });
+    return result;
   };
+  publishSelectedState = async () => { await readSelectedState(); };
 
   const selectRepository = async (): Promise<void> => {
     const state = selection.currentState;
