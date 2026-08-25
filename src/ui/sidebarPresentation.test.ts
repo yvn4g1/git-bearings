@@ -51,6 +51,46 @@ test("working tree groups retain staged, unstaged, conflicts, renames, and copie
   assert.ok(presentation({ workingTree: { staged: [], unstaged: [], untracked: [], conflicts: [] } }).some((node) => node.label === "作業中" && node.description === "変更なし"));
 });
 
+test("staged only shows only the staged group", () => {
+  const all = labels(presentation({ workingTree: {
+    staged: [{ path: "staged.ts", kind: "modified" }], unstaged: [], untracked: [], conflicts: [],
+  } }));
+  assert.ok(all.includes("次のcommitに入る変更"));
+  assert.ok(!all.includes("まだaddしていない変更"));
+  assert.ok(!all.includes("未追跡"));
+  assert.ok(!all.includes("競合"));
+});
+
+test("unstaged only shows only the unstaged group", () => {
+  const all = labels(presentation({ workingTree: {
+    staged: [], unstaged: [{ path: "unstaged.ts", kind: "modified" }], untracked: [], conflicts: [],
+  } }));
+  assert.ok(all.includes("まだaddしていない変更"));
+  assert.ok(!all.includes("次のcommitに入る変更"));
+  assert.ok(!all.includes("未追跡"));
+  assert.ok(!all.includes("競合"));
+});
+
+test("untracked only shows only the untracked group", () => {
+  const all = labels(presentation({ workingTree: {
+    staged: [], unstaged: [], untracked: ["untracked.ts"], conflicts: [],
+  } }));
+  assert.ok(all.includes("未追跡"));
+  assert.ok(!all.includes("次のcommitに入る変更"));
+  assert.ok(!all.includes("まだaddしていない変更"));
+  assert.ok(!all.includes("競合"));
+});
+
+test("conflict only shows a separate conflict group", () => {
+  const all = labels(presentation({ workingTree: {
+    staged: [], unstaged: [], untracked: [], conflicts: [{ path: "conflict.ts", kind: "bothModified" }],
+  } }));
+  assert.ok(all.includes("競合"));
+  assert.ok(!all.includes("まだaddしていない変更"));
+  assert.ok(!all.includes("次のcommitに入る変更"));
+  assert.ok(!all.includes("未追跡"));
+});
+
 test("base ref, upstream, stash, and partial unavailable facts stay distinct", () => {
   const remoteBase = presentation({
     remotes: { kind: "available", value: [{ name: "origin", trackingRefs: [{ branchName: "main", trackingRef: "refs/remotes/origin/main", commitId: otherOid }], locallyKnownDefaultBranch: null }] },
@@ -70,6 +110,40 @@ test("base ref, upstream, stash, and partial unavailable facts stay distinct", (
   const partial = presentation({ comparison: { kind: "unavailable", reason: "failed" } });
   assert.ok(labels(partial).includes("feature"));
   assert.ok(labels(partial).includes("upstreamは設定されていません"));
+});
+
+test("upstream unavailable is distinct from not configured", () => {
+  const all = labels(presentation({ upstream: { kind: "unavailable", reason: "upstream read failed" } }));
+  assert.ok(all.includes("upstream情報を取得できません"));
+  assert.ok(!all.includes("upstreamは設定されていません"));
+});
+
+test("remote upstream relation unavailable retains the remote target and last-fetched context", () => {
+  const nodes = presentation({ upstream: { kind: "available", value: {
+    remoteName: "origin", branchName: "main", trackingRef: "refs/remotes/origin/main",
+    relation: { kind: "unavailable", reason: "tracking ref is unavailable" },
+  } } });
+  const all = labels(nodes);
+  assert.ok(all.includes("upstream: origin/main"));
+  assert.ok(all.includes("差分を取得できません"));
+  assert.ok(!all.includes("ローカルupstream: main"));
+  assert.equal(nodes.find((node) => node.id === "upstream")?.children?.[0].description, "最後に取得したRemote情報");
+  assert.equal(nodes.find((node) => node.id === "upstream")?.children?.[0].tooltip, "これはlive Remote状態ではなく、ローカルGitが最後に取得したRemote情報です。");
+});
+
+test("multiple supplemental unavailable sections preserve core presentation", () => {
+  const all = labels(presentation({
+    comparison: { kind: "unavailable", reason: "comparison failed" },
+    upstream: { kind: "unavailable", reason: "upstream failed" },
+    stash: { kind: "unavailable", reason: "stash failed" },
+  }));
+  assert.ok(all.includes("基準branchとの関係を取得できません"));
+  assert.ok(all.includes("upstream情報を取得できません"));
+  assert.ok(all.includes("Stash情報を取得できません"));
+  assert.ok(all.includes("あなたは今ここ"));
+  assert.ok(all.includes("feature"));
+  assert.ok(all.includes("作業中"));
+  assert.ok(all.includes("変更なし"));
 });
 
 function presentation(overrides: Partial<RepositoryState> = {}): readonly SidebarNode[] {
