@@ -1,10 +1,17 @@
 import * as vscode from "vscode";
+import { renderOverviewHtml } from "./overviewHtmlRenderer";
+import { createOverviewPresentation } from "./overviewPresentation";
+import { type RepositoryStateSnapshot, RepositoryStateSnapshotStore } from "./repositoryStateSnapshot";
 
 const GIT_MAP_PANEL_VIEW_TYPE = "gitBearings.gitMap";
 
 export class GitMapPanel implements vscode.Disposable {
   private panel: vscode.WebviewPanel | undefined;
   private readonly disposables: vscode.Disposable[] = [];
+
+  constructor(private readonly snapshotStore: RepositoryStateSnapshotStore) {
+    this.disposables.push(snapshotStore.onDidChange(() => this.render()));
+  }
 
   show(): void {
     if (this.panel) {
@@ -19,8 +26,8 @@ export class GitMapPanel implements vscode.Disposable {
       { enableScripts: false },
     );
 
-    panel.webview.html = createGitMapHtml(panel.webview);
     this.panel = panel;
+    this.render();
     this.disposables.push(
       panel.onDidDispose(() => {
         if (this.panel === panel) {
@@ -36,10 +43,15 @@ export class GitMapPanel implements vscode.Disposable {
       disposable.dispose();
     }
   }
+
+  private render(): void {
+    if (this.panel) this.panel.webview.html = createGitMapHtml(this.panel.webview, this.snapshotStore.current);
+  }
 }
 
-function createGitMapHtml(webview: vscode.Webview): string {
+function createGitMapHtml(webview: vscode.Webview, snapshot: RepositoryStateSnapshot): string {
   const nonce = createNonce();
+  const overview = renderOverviewHtml(createOverviewPresentation(snapshot));
 
   return /* html */ `<!DOCTYPE html>
 <html lang="ja">
@@ -129,6 +141,16 @@ function createGitMapHtml(webview: vscode.Webview): string {
       .continuous-detail { margin-top: 12px; color: var(--vscode-descriptionForeground); font-size: 0.86em; }
       .continuous-detail summary { cursor: pointer; }
       .continuous-detail p { margin: 7px 0 0; }
+      .overview { color: var(--vscode-foreground); }
+      .overview-repository { color: var(--vscode-descriptionForeground); font-size: 0.82em; overflow-wrap: anywhere; }
+      .overview-message, .overview-meaning { color: var(--vscode-descriptionForeground); }
+      .overview-operation { border-left: 3px solid var(--vscode-notificationsWarningIcon-foreground); padding-left: 8px; font-weight: 700; }
+      .overview-section { border-top: 1px solid var(--vscode-panel-border); padding: 10px 0; }
+      .overview-section h3 { margin: 0 0 7px; }
+      .overview-section dl { margin: 0; }
+      .overview-section dl div { display: grid; grid-template-columns: minmax(86px, auto) minmax(0, 1fr); gap: 8px; margin: 3px 0; }
+      .overview-section dt { color: var(--vscode-descriptionForeground); }
+      .overview-section dd { margin: 0; overflow-wrap: anywhere; }
       #layout-wide:checked ~ .wide-prototype { display: grid; }
       #layout-compact:checked ~ .compact-prototype { display: block; }
       #layout-continuous:checked ~ .continuous-prototype { display: block; }
@@ -253,26 +275,9 @@ function createGitMapHtml(webview: vscode.Webview): string {
         </div>
       </section>
 
-      <aside class="detail-pane" aria-label="Detail Pane fixture">
+      <aside class="detail-pane" aria-label="Overview Detail">
         <h2>DETAIL PANE</h2>
-        <div class="detail-normal">
-          <h3>現在地（fixture）</h3>
-          <p>mainの先頭commitをHEADが参照しています。Sidebarを見なくても、Map内のpointerとlabelで関係を追えるか確認します。</p>
-          <ul class="detail-list">
-            <li>Working Tree: 2 changes</li>
-            <li>Staging: 1 change</li>
-            <li>Local: main at latest commit</li>
-          </ul>
-        </div>
-        <div class="detail-preview">
-          <h3>何が変わる？（fixture Preview）</h3>
-          <p>Stagingの変更が新しいcommitになる方向を矢印で示します。mainとHEADは、生成予定のcommitを指す位置へ移ります。</p>
-          <ul class="detail-list">
-            <li>変化元: Staging</li>
-            <li>変化先: ◌ NEW COMMIT</li>
-            <li>pointer: main / HEAD → new commit</li>
-          </ul>
-        </div>
+        ${overview}
       </aside>
     </main>
 
@@ -298,8 +303,7 @@ function createGitMapHtml(webview: vscode.Webview): string {
       </section>
       <section class="compact-section">
         <h2>DETAIL</h2>
-        <p class="compact-detail detail-normal">Mapだけで現在地を読むための最小表示です。</p>
-        <p class="compact-detail detail-preview">Staging → NEW COMMIT。main / HEADが右の生成予定commitへ移動します。</p>
+        ${overview}
       </section>
     </main>
 
@@ -314,9 +318,8 @@ function createGitMapHtml(webview: vscode.Webview): string {
       <div class="continuous-row continuous-staging"><strong>Staging</strong><span class="continuous-secondary">1 change</span></div>
       ${createContinuousGraphFixtures()}
       <details class="continuous-detail">
-        <summary>詳細を見る</summary>
-        <p class="detail-normal">fixtureの現在地。Graphとpointerを第一層に置きます。</p>
-        <p class="detail-preview">Prediction: StagingからNEW COMMITを生成し、main / HEADが移動します。実際のRepositoryは変更されません。</p>
+        <summary>Overview</summary>
+        ${overview}
       </details>
     </main>
   </body>

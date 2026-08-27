@@ -27,7 +27,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const outputChannel = vscode.window.createOutputChannel("Git Bearings");
   const snapshotStore = new RepositoryStateSnapshotStore();
   const sidebar = createGitBearingsSidebar(snapshotStore);
-  const gitMapPanel = new GitMapPanel();
+  const gitMapPanel = new GitMapPanel(snapshotStore);
   const appViewState = new AppViewStateStore<unknown>();
   const basePreference = new BasePreferenceController({
     read: () => context.workspaceState.get<unknown>(BASE_PREFERENCE_KEY),
