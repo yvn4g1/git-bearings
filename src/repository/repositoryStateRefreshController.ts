@@ -19,7 +19,7 @@ export class RepositoryStateRefreshController {
   private generation = 0;
   private version = 0;
   private timer: RefreshTimer | undefined;
-  private active: { generation: number; pending: boolean } | undefined;
+  private active: ActiveRefresh | undefined;
   private readonly now: () => Date;
   private readonly scheduler: RefreshScheduler;
 
@@ -53,18 +53,22 @@ export class RepositoryStateRefreshController {
     const selected = this.dependencies.getSelectedRepository();
     if (!selected) return undefined;
     this.cancelTimer();
-    if (this.active?.generation === this.generation) { this.active.pending = true; return undefined; }
+    const active = this.active;
+    if (active?.generation === this.generation) {
+      active.pending = true;
+      return new Promise((resolve) => active.waiters.push(resolve));
+    }
     return this.startRefresh(this.generation);
   }
 
-  dispose(): void { this.generation += 1; this.cancelTimer(); this.active = undefined; }
+  dispose(): void { this.generation += 1; this.cancelTimer(); this.active?.waiters.forEach((resolve) => resolve(undefined)); this.active = undefined; }
 
-  private async startRefresh(generation: number): Promise<AvailabilityResult<RepositoryState> | undefined> {
+  private async startRefresh(generation: number, waiters: RefreshWaiter[] = []): Promise<AvailabilityResult<RepositoryState> | undefined> {
     if (generation !== this.generation || this.active?.generation === generation) return undefined;
     const selected = this.dependencies.getSelectedRepository();
     if (!selected) return undefined;
     const target = { id: selected.id, rootPath: selected.rootPath };
-    const active = { generation, pending: false };
+    const active: ActiveRefresh = { generation, pending: false, waiters };
     this.active = active;
     const result = await this.dependencies.read(target.rootPath, this.dependencies.getSavedBase(target.id), { stateVersion: this.version + 1, refreshedAt: this.now() });
     const current = this.dependencies.getSelectedRepository();
@@ -78,9 +82,13 @@ export class RepositoryStateRefreshController {
       }
     }
     if (this.active === active) this.active = undefined;
-    if (currentRequest && active.pending) void this.startRefresh(generation);
-    return result;
+    if (currentRequest && active.pending) void this.startRefresh(generation, active.waiters);
+    else active.waiters.forEach((resolve) => resolve(currentRequest ? result : undefined));
+    return currentRequest ? result : undefined;
   }
 
   private cancelTimer(): void { this.timer?.dispose(); this.timer = undefined; }
 }
+
+type RefreshWaiter = (result: AvailabilityResult<RepositoryState> | undefined) => void;
+interface ActiveRefresh { readonly generation: number; pending: boolean; readonly waiters: RefreshWaiter[]; }

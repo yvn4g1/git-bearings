@@ -24,6 +24,36 @@ test("read-time events become one follow-up without parallel reads", async () =>
   deferred.resolve({ kind: "available", value: state(1) }); await flush(); await flush(); assert.equal(reads, 2);
 });
 
+test("refreshNow waits for the one coalesced follow-up result while a read is active", async () => {
+  let selected = candidate("a"); const first = deferredResult(); let reads = 0;
+  const controller = create({ getSelected: () => selected, read: async (_path, _base, metadata) => { reads += 1; return reads === 1 ? first.promise : { kind: "available" as const, value: state(metadata.stateVersion) }; } });
+  void controller.refreshNow(); await flush(); const waiting = controller.refreshNow(); assert.equal(reads, 1);
+  first.resolve({ kind: "available", value: state(1) }); const result = await waiting;
+  assert.equal(reads, 2); assert.equal(result?.kind, "available"); if (result?.kind === "available") assert.equal(result.value.stateVersion, 2);
+});
+
+test("multiple refreshNow callers share one pending follow-up", async () => {
+  let selected = candidate("a"); const first = deferredResult(); let reads = 0;
+  const controller = create({ getSelected: () => selected, read: async (_path, _base, metadata) => { reads += 1; return reads === 1 ? first.promise : { kind: "available" as const, value: state(metadata.stateVersion) }; } });
+  void controller.refreshNow(); await flush(); const firstWaiter = controller.refreshNow(), secondWaiter = controller.refreshNow(); assert.equal(reads, 1);
+  first.resolve({ kind: "available", value: state(1) }); const [one, two] = await Promise.all([firstWaiter, secondWaiter]);
+  assert.equal(reads, 2); assert.equal(one?.kind, "available"); assert.equal(two?.kind, "available");
+});
+
+test("refreshNow does not return stale results after a repository switch", async () => {
+  let selected = candidate("a"); const a = deferredResult(), b = deferredResult(); const store = new RepositoryStateSnapshotStore(); let calls = 0;
+  const controller = create({ store, getSelected: () => selected, read: async (_path, _base, metadata) => ++calls === 1 ? a.promise : b.promise });
+  const result = controller.refreshNow(); selected = candidate("b"); controller.onSelectionChanged(); await flush(); a.resolve({ kind: "available", value: state(1) }); assert.equal(await result, undefined);
+  assert.equal(store.current.kind, "loading"); b.resolve({ kind: "available", value: state(1) }); await flush(); const afterB = store.current as RepositoryStateSnapshot; if (afterB.kind === "available") assert.equal(afterB.state.stateVersion, 1);
+});
+
+test("A to B to A does not return the old A result to its refreshNow caller", async () => {
+  let selected = candidate("a"); const oldA = deferredResult(); let calls = 0;
+  const controller = create({ getSelected: () => selected, read: async (_path, _base, metadata) => ++calls === 1 ? oldA.promise : { kind: "available" as const, value: state(metadata.stateVersion) } });
+  const result = controller.refreshNow(); selected = candidate("b"); controller.onSelectionChanged(); await flush(); selected = candidate("a"); controller.onSelectionChanged(); await flush(); oldA.resolve({ kind: "available", value: state(1) });
+  assert.equal(await result, undefined);
+});
+
 test("versions advance only for current available publications and failures replace old facts", async () => {
   let selected = candidate("a"); const store = new RepositoryStateSnapshotStore(); const results = [{ kind: "available" as const }, { kind: "unavailable" as const, reason: "core failed" }, { kind: "available" as const }];
   const controller = create({ store, getSelected: () => selected, read: async (_path, _base, metadata) => { const next = results.shift()!; return next.kind === "available" ? { ...next, value: { ...state(metadata.stateVersion), comparison: { kind: "unavailable", reason: "comparison failed" } } } : next; } });
