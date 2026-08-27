@@ -24,6 +24,10 @@
       {
         "command": "gitBearings.selectBaseBranch",
         "title": "Git Bearings: 基準branchを選択"
+      },
+      {
+        "command": "gitBearings.refresh",
+        "title": "Git Bearings: Git状態を更新"
       }
     ],
     "views": {
@@ -47,6 +51,7 @@
     "test:comparison": "npm run compile && node --test out/git/branchComparisonReader.test.js out/repository/baseResolver.test.js out/repository/basePreference.test.js out/repository/baseSelection.test.js out/repository/repositoryStateComposer.test.js out/repository/repositoryStateReader.test.js",
     "test:sidebar": "npm run compile && node --test out/ui/repositoryStateSnapshot.test.js out/ui/sidebarPresentation.test.js",
     "test:overview": "npm run compile && node --test out/ui/overviewPresentation.test.js out/ui/overviewHtmlRenderer.test.js",
+    "test:refresh": "npm run compile && node --test out/repository/repositoryStateRefreshController.test.js",
     "vscode:prepublish": "npm run compile"
   },
   "devDependencies": {

@@ -17,7 +17,8 @@ import { BranchComparisonReader } from "./git/branchComparisonReader";
 import { RepositoryStateReader } from "./repository/repositoryStateReader";
 import { BasePreferenceController, BASE_PREFERENCE_KEY } from "./repository/basePreference";
 import { createBaseSelectionCandidates } from "./repository/baseSelection";
-import { matchesSnapshotTarget, RepositoryStateSnapshotStore } from "./ui/repositoryStateSnapshot";
+import { RepositoryStateSnapshotStore } from "./ui/repositoryStateSnapshot";
+import { RepositoryStateRefreshController } from "./repository/repositoryStateRefreshController";
 
 const selectedRepositoryKey = "gitBearings.selectedRepository";
 
@@ -33,52 +34,39 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     read: () => context.workspaceState.get<unknown>(BASE_PREFERENCE_KEY),
     write: (value) => context.workspaceState.update(BASE_PREFERENCE_KEY, value),
   });
-  let publishSelectedState: () => Promise<void> = async () => undefined;
+  let refreshController: RepositoryStateRefreshController | undefined;
   const selection = new RepositorySelectionController({
     rememberedId: () => context.workspaceState.get<string>(selectedRepositoryKey),
     remember: (id) => { void context.workspaceState.update(selectedRepositoryKey, id); },
     resetViewState: () => appViewState.resetForRepositoryChange(),
-    onDidChange: () => { void publishSelectedState(); },
+    onDidChange: () => refreshController?.onSelectionChanged(),
     onDidAutoSelectAfterSelectionLost: (repository) => {
       void vscode.window.showInformationMessage(`選択中のRepositoryが利用できなくなったため、${repository.rootPath} に切り替えました。`);
     },
   });
-  const source = new VscodeGitRepositorySource(
-    () => getGitApi(),
-    (candidates) => selection.updateCandidates(candidates),
-    (reason) => selection.setUnavailable(reason),
-  );
   const gitResolution = await resolveVscodeGitExecutable(vscode.extensions);
   const gitUnavailableReason = gitResolution.kind === "unavailable" ? gitResolution.reason : undefined;
   const stateReader = gitResolution.kind === "available"
     ? createRepositoryStateReader(gitResolution.path, outputChannel)
     : undefined;
 
-  const readSelectedState = async () => {
-    const selected = selection.currentState;
-    if (selected.kind !== "selected") {
-      snapshotStore.clear();
-      return undefined;
-    }
-    const repository = selected.repository;
-    if (!stateReader) {
-      snapshotStore.set({ kind: "unavailable", repositoryId: repository.id, rootPath: repository.rootPath, reason: gitUnavailableReason ?? "Git executable is unavailable." });
-      return undefined;
-    }
-    snapshotStore.set({ kind: "loading", repositoryId: repository.id, rootPath: repository.rootPath });
-    const result = await stateReader.read(
-      repository.rootPath,
-      basePreference.get(repository.id),
-      { stateVersion: 1, refreshedAt: new Date() },
-    );
-    const current = selection.currentState;
-    const currentRepository = current.kind === "selected" ? current.repository : undefined;
-    if (!matchesSnapshotTarget(currentRepository, repository.id, repository.rootPath)) return result;
-    if (result.kind === "available") snapshotStore.set({ kind: "available", repositoryId: repository.id, state: result.value });
-    else snapshotStore.set({ kind: "unavailable", repositoryId: repository.id, rootPath: repository.rootPath, reason: result.reason });
-    return result;
-  };
-  publishSelectedState = async () => { await readSelectedState(); };
+  refreshController = new RepositoryStateRefreshController({
+    getSelectedRepository: () => {
+      const state = selection.currentState;
+      return state.kind === "selected" ? state.repository : undefined;
+    },
+    getSavedBase: (repositoryId) => basePreference.get(repositoryId),
+    read: (repositoryPath, savedBase, metadata) => stateReader
+      ? stateReader.read(repositoryPath, savedBase, metadata)
+      : Promise.resolve({ kind: "unavailable", reason: gitUnavailableReason ?? "Git executable is unavailable." }),
+    snapshotStore,
+  });
+  const source = new VscodeGitRepositorySource(
+    () => getGitApi(),
+    (candidates) => selection.updateCandidates(candidates),
+    (reason) => selection.setUnavailable(reason),
+    (repositoryId) => refreshController?.requestAutoRefresh(repositoryId),
+  );
 
   const selectRepository = async (): Promise<void> => {
     const state = selection.currentState;
@@ -102,7 +90,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await vscode.window.showWarningMessage(gitUnavailableReason ?? "Git executable is unavailable.");
       return;
     }
-    const stateResult = await readSelectedState();
+    const stateResult = await refreshController.refreshNow();
     if (!stateResult || stateResult.kind === "unavailable") {
       await vscode.window.showWarningMessage(stateResult?.reason ?? "Repository state is unavailable.");
       return;
@@ -116,8 +104,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       placeHolder: "Git Bearingsの基準branchを選択",
     });
     if (!picked) return;
+    const current = selection.currentState;
+    if (current.kind !== "selected" || current.repository.id !== selected.repository.id || current.repository.rootPath !== selected.repository.rootPath) return;
     await basePreference.save(selected.repository.id, picked.savedBase);
-    const refreshed = await readSelectedState();
+    const refreshed = await refreshController.refreshNow();
     if (refreshed?.kind === "unavailable") {
       outputChannel.appendLine(`Git Bearings state: ${refreshed.reason}`);
     }
@@ -128,11 +118,20 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     sidebar,
     gitMapPanel,
     source,
+    refreshController,
     vscode.commands.registerCommand("gitBearings.selectRepository", selectRepository),
     vscode.commands.registerCommand("gitBearings.selectBaseBranch", selectBaseBranch),
+    vscode.commands.registerCommand("gitBearings.refresh", async () => {
+      if (selection.currentState.kind !== "selected") {
+        await vscode.window.showInformationMessage("先にGit BearingsのRepositoryを選択してください。");
+        return;
+      }
+      const refreshed = await refreshController?.refreshNow();
+      if (refreshed?.kind === "unavailable") outputChannel.appendLine(`Git Bearings state: ${refreshed.reason}`);
+    }),
     registerOpenGitBearingsCommand(outputChannel, async () => {
       if (selection.currentState.kind === "selectionRequired") await selectRepository();
-      const state = await readSelectedState();
+      const state = await refreshController.refreshNow();
       if (state?.kind === "unavailable") outputChannel.appendLine(`Git Bearings state: ${state.reason}`);
       await vscode.commands.executeCommand(
         "setContext",

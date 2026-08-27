@@ -3,7 +3,7 @@ import test from "node:test";
 import { RepositorySelectionController } from "./repositorySelection";
 import { VscodeGitRepositorySource, toCandidates, type DisposableLike, type GitApiLike } from "./vscodeGitRepositorySource";
 function event() { let listener: (() => void) | undefined; return { subscribe: (next: () => void): DisposableLike => { listener = next; return { dispose: () => { listener = undefined; } }; }, fire: () => listener?.() }; }
-function repository(path: string) { return { rootUri: { toString: () => `file://${path}`, fsPath: path } }; }
+function repository(path: string) { const state = event(); return { rootUri: { toString: () => `file://${path}`, fsPath: path }, state: { onDidChange: state.subscribe }, fireState: state.fire }; }
 test("maps and deduplicates VS Code Git repositories without changing nested candidates", () => assert.deepEqual(toCandidates([repository("/parent"), repository("/parent/nested"), repository("/parent")]), [{ id: "file:///parent", rootPath: "/parent" }, { id: "file:///parent/nested", rootPath: "/parent/nested" }]));
 test("waits for initialization, ignores early events, then refreshes the complete repository set", async () => {
   const open = event(), close = event(), state = event(); let repositories = [repository("/a")]; const snapshots: unknown[] = [];
@@ -25,3 +25,13 @@ test("final initialized snapshot prevents an early one-repository auto-selection
   assert.equal(controller.currentState.kind, "selectionRequired"); source.dispose(); close.fire();
 });
 test("reports activation or API acquisition failures as unavailable", async () => { let reason: string | undefined; const source = new VscodeGitRepositorySource(async () => { throw new Error("Git extension unavailable"); }, () => assert.fail("candidates"), (value) => { reason = value; }); await source.initialize(); assert.equal(reason, "Git extension unavailable"); });
+
+test("subscribes each repository state once, reports its id, and disposes removed listeners", async () => {
+  const open = event(), close = event(), initialized = event(); const a = repository("/a"), b = repository("/b"); let repositories = [a, b]; const changed: string[] = [];
+  const api: GitApiLike = { get repositories() { return repositories; }, state: "initialized", onDidOpenRepository: open.subscribe, onDidCloseRepository: close.subscribe, onDidChangeState: initialized.subscribe };
+  const source = new VscodeGitRepositorySource(async () => api, () => undefined, () => assert.fail("unavailable"), (id) => changed.push(id));
+  await source.initialize(); a.fireState(); b.fireState(); assert.deepEqual(changed, ["file:///a", "file:///b"]);
+  open.fire(); a.fireState(); assert.deepEqual(changed, ["file:///a", "file:///b", "file:///a"]);
+  repositories = [b]; close.fire(); a.fireState(); b.fireState(); assert.deepEqual(changed, ["file:///a", "file:///b", "file:///a", "file:///b"]);
+  source.dispose(); b.fireState(); assert.equal(changed.length, 4);
+});
