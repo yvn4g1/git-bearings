@@ -57,7 +57,13 @@ function upstreamSection(state: RepositoryState): OverviewSection {
   if (upstream.kind === "unavailable") return unavailable("upstream", "追跡関係 / Remote", "upstream情報を取得できません", undefined, upstream.reason);
   const value = upstream.value;
   const target = value.remoteName === "." ? `ローカルupstream: ${value.branchName}` : `upstream: ${value.remoteName}/${value.branchName}`;
-  if (value.relation.kind === "unavailable") return unavailable("upstream", "追跡関係 / Remote", target, "upstreamとの差分を取得できません。", value.relation.reason);
+  if (value.relation.kind === "unavailable") return unavailable(
+    "upstream",
+    "追跡関係 / Remote",
+    target,
+    value.remoteName === "." ? "ローカルupstreamとの差分を取得できません。" : "最後に取得したRemote情報との差分を取得できません。",
+    value.relation.reason,
+  );
   const relation = value.relation.value;
   let meaning: string;
   if (value.remoteName === ".") meaning = relation.ahead || relation.behind ? "ローカルupstreamとの差分があります。" : "ローカルupstreamとの差分はありません。";

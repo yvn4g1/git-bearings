@@ -206,7 +206,7 @@ function createGitMapHtml(webview: vscode.Webview, snapshot: RepositoryStateSnap
   </head>
   <body>
     <h1>Git Bearings: Git Map</h1>
-    <p class="fixture-note">UX Gate用の静的fixtureです。実際のRepository状態・Git操作・Previewは表示していません。</p>
+    <p class="fixture-note">Git Map部分はUX試作の静的fixtureです。Overview Detailは実際のRepository状態を表示しています。</p>
 
     <input class="control-input" id="layout-wide" type="radio" name="layout" />
     <input class="control-input" id="layout-compact" type="radio" name="layout" />

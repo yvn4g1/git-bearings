@@ -30,6 +30,7 @@ test("current locations, comparison semantics, and operation banner stay factual
   assert.equal(available({ operation: { kind: "merge" } }).operationBanner, "merge処理中");
   assert.equal(available({ operation: { kind: "rebase" } }).operationBanner, "rebase処理中");
   assert.equal(available({ operation: { kind: "unsupported", operationName: "cherry-pick" } }).operationBanner, "cherry-pick: Git処理の途中です");
+  assert.equal(available({ operation: { kind: "normal" } }).operationBanner, undefined);
 });
 
 test("working tree meanings cover clean, mixed, and conflicts", () => {
@@ -49,9 +50,20 @@ test("tracking keeps remote, local, unavailable, and partial states distinct", (
   assert.match(section(available({ upstream: remote }), "upstream").meaning ?? "", /最後に取得したRemote情報/);
   const equal = { ...remote, value: { ...remote.value, relation: { kind: "available" as const, value: { ahead: 0, behind: 0 } } } };
   assert.equal(section(available({ upstream: equal }), "upstream").meaning, "最後に取得したRemote情報との差分はありません。");
+  const behind = { ...remote, value: { ...remote.value, relation: { kind: "available" as const, value: { ahead: 0, behind: 2 } } } };
+  assert.match(section(available({ upstream: behind }), "upstream").meaning ?? "", /最後に取得したRemote情報/);
+  const remoteUnavailable = { ...remote, value: { ...remote.value, relation: { kind: "unavailable" as const, reason: "no remote tip" } } };
+  const unavailableRemoteSection = section(available({ upstream: remoteUnavailable }), "upstream");
+  assert.equal(unavailableRemoteSection.facts[0].value, "upstream: origin/main");
+  assert.equal(unavailableRemoteSection.meaning, "最後に取得したRemote情報との差分を取得できません。");
+  assert.equal(unavailableRemoteSection.unavailableReason, "no remote tip");
+  assert.doesNotMatch(unavailableRemoteSection.meaning ?? "", /ローカルupstream/);
   const local = { kind: "available" as const, value: { ...remote.value, remoteName: ".", relation: { kind: "unavailable" as const, reason: "no tip" } } };
-  assert.equal(section(available({ upstream: local }), "upstream").facts[0].value, "ローカルupstream: main");
-  assert.equal(section(available({ upstream: local }), "upstream").unavailableReason, "no tip");
+  const unavailableLocalSection = section(available({ upstream: local }), "upstream");
+  assert.equal(unavailableLocalSection.facts[0].value, "ローカルupstream: main");
+  assert.equal(unavailableLocalSection.meaning, "ローカルupstreamとの差分を取得できません。");
+  assert.equal(unavailableLocalSection.unavailableReason, "no tip");
+  assert.doesNotMatch(unavailableLocalSection.meaning ?? "", /最後に取得したRemote情報/);
   const partial = available({ comparison: { kind: "unavailable", reason: "comparison" }, upstream: { kind: "unavailable", reason: "upstream" } });
   assert.equal(section(partial, "current").facts[0].value, "feature");
   assert.equal(section(partial, "working").facts[0].value, "0");
