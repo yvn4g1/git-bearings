@@ -10,6 +10,10 @@ test("Git Map renderer escapes repository-derived strings and preserves CSP", ()
   assert.ok(html.includes("&lt;img src=x&gt;"));
   assert.ok(!html.includes("<script>"));
   assert.ok(!html.includes("fixture"));
+  assert.ok(html.includes("↓ add：内容をStagingへ反映"));
+  assert.ok(html.includes("↓ commit：Staging内容からcommitを作成"));
+  assert.ok(!html.includes(">↓ add<"));
+  assert.ok(!html.includes(">↓ commit<"));
 });
 
 function presentation(): GitMapPresentation {
