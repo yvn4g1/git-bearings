@@ -18,7 +18,16 @@ test("Git Map renderer escapes repository-derived strings and preserves CSP", ()
   assert.ok(!html.includes(">CURRENT<"));
   assert.ok(!html.includes("BRANCH POINT"));
   assert.ok(!html.includes("BRANCH CREATED HERE"));
-  assert.ok(html.includes("local-branch-ref") === false);
+});
+
+test("renderer emits hidden ref grammar and unborn state without injection", () => {
+  const snapshot = { kind: "empty" as const };
+  const normal: GitMapPresentation = { status: "available", workingTree: [], staging: { label: "Staged", value: "0" }, graph: { kind: "graph", nodes: [{ commitId: "id", shortId: "abc", subject: "subject", x: 20, y: 80, roles: ["base", "mergeBase"] }], edges: [], omissions: [], localBranches: [{ kind: "local", label: `<script>`, targetCommitId: "id", x: 20, y: 48, targetY: 80, current: true }], remoteTrackingRefs: [{ kind: "remoteTracking", label: `<img src=x>/</text><script>`, targetCommitId: "id", x: 20, y: 110, targetY: 80, current: false }], head: { targetKind: "branch", targetCommitId: "id", x: 20, y: 18, targetY: 36 }, width: 200, height: 140 }, remotes: [], upstream: [], detailSnapshot: snapshot };
+  const html = renderGitMapHtml(normal, "nonce");
+  for (const value of ["local-branch-ref", "local-ref", "ref-line", "head-pointer", "head-line", "head-label", "remote-tracking-ref", "remote-tracking-hidden", "remote-tracking-box", "remote-tracking-line", "display:none", "stroke-dasharray"]) assert.ok(html.includes(value));
+  assert.ok(html.includes("&lt;script&gt;")); assert.ok(html.includes("&lt;img src=x&gt;")); assert.ok(!html.includes("<script>"));
+  const unborn = { ...normal, graph: { kind: "unborn" as const, nodes: [], edges: [], omissions: [], localBranches: [], remoteTrackingRefs: [], unbornBranch: "main", width: 0, height: 0, message: "まだ commit がありません" } };
+  const unbornHtml = renderGitMapHtml(unborn, "nonce"); assert.ok(unbornHtml.includes("[ main ]")); assert.ok(!unbornHtml.includes('class="graph-node"'));
 });
 
 function presentation(): GitMapPresentation {

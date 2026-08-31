@@ -53,6 +53,14 @@ test("detached HEAD has no branch label and unborn history creates no commit", (
   assert.equal(graph([], { currentLocation: { kind: "unborn", branchName: "main", head: null, detached: false } }).nodes.length, 0);
 });
 
+test("unborn and out-of-snapshot refs have no fake commit target", () => {
+  const unborn = graph([], { currentLocation: { kind: "unborn", branchName: "main", head: null, detached: false } });
+  assert.equal(unborn.kind, "unborn"); assert.equal(unborn.unbornBranch, "main"); assert.equal(unborn.nodes.length, 0); assert.equal(unborn.localBranches.length, 0);
+  const visible = commit("a"); const hidden = id("h");
+  const result = graph([visible], { localBranches: [{ name: "visible", tipCommitId: visible.commit.id }, { name: "hidden", tipCommitId: hidden }], remotes: { kind: "available", value: [{ name: "origin", trackingRefs: [{ branchName: "main", trackingRef: "refs/cache/custom", commitId: visible.commit.id }, { branchName: "hidden", trackingRef: "refs/cache/hidden", commitId: hidden }], locallyKnownDefaultBranch: null }] } });
+  assert.deepEqual(result.localBranches.map((ref) => ref.label), ["visible"]); assert.deepEqual(result.remoteTrackingRefs.map((ref) => ref.label), ["origin/main"]); assert.equal(result.nodes.some((node) => node.commitId === hidden), false);
+});
+
 test("ref overlays use current branch coordinates and avoid local/remote collisions", () => {
   const only = commit("a");
   const result = graph([only], { currentLocation: { kind: "branch", branchName: "zzz-current", head: only.commit, detached: false }, localBranches: [{ name: "aaa", tipCommitId: only.commit.id }, { name: "zzz-current", tipCommitId: only.commit.id }], remotes: { kind: "available", value: [{ name: "fork", trackingRefs: [{ branchName: "main", trackingRef: "refs/cache/fork", commitId: only.commit.id }], locallyKnownDefaultBranch: null }, { name: "origin", trackingRefs: [{ branchName: "main", trackingRef: "refs/cache/origin", commitId: only.commit.id }], locallyKnownDefaultBranch: null }] } });

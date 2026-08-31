@@ -40,6 +40,15 @@ test("remote absence, cached refs, and supplemental failure remain distinct", ()
   assert.equal(unavailable.graph.kind, "empty");
 });
 
+test("only origin is a normal Remote representative", () => {
+  const fork = { name: "fork", trackingRefs: [], locallyKnownDefaultBranch: null };
+  const origin = { name: "origin", trackingRefs: [], locallyKnownDefaultBranch: null };
+  const withoutOrigin = presentation({ remotes: { kind: "available", value: [fork] } });
+  assert.equal(withoutOrigin.remotes.length, 0); assert.equal(withoutOrigin.remoteMessage, "origin は設定されていません");
+  const withOrigin = presentation({ remotes: { kind: "available", value: [fork, origin] } });
+  assert.deepEqual(withOrigin.remotes.map((remote) => remote.name), ["origin"]);
+});
+
 test("upstream relation is sourced from RepositoryState", () => {
   const map = presentation({ upstream: { kind: "available", value: { remoteName: "origin", branchName: "feature", trackingRef: "refs/remotes/origin/feature", relation: { kind: "available", value: { ahead: 2, behind: 1 } } } } });
   assert.deepEqual(map.upstream, [{ label: "追跡", value: "upstream: origin/feature" }, { label: "あなた側のみ", value: "2" }, { label: "upstream側のみ", value: "1" }]);
