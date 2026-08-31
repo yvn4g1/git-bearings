@@ -39,13 +39,19 @@ export interface CommitGraphPresentation {
   readonly remoteTrackingRefs: readonly GraphRef[];
   readonly head?: GraphHead;
 }
-export interface GraphRef { readonly kind: "local" | "remoteTracking"; readonly label: string; readonly targetCommitId: string; readonly x: number; readonly y: number; readonly targetY: number; readonly current: boolean; }
+export interface GraphRefBounds { readonly left: number; readonly top: number; readonly width: number; readonly height: number; }
+export interface GraphRefConnector { readonly fromX: number; readonly fromY: number; readonly toX: number; readonly toY: number; }
+export interface GraphRef { readonly kind: "local" | "remoteTracking"; readonly label: string; readonly targetCommitId: string; readonly x: number; readonly y: number; readonly targetY: number; readonly current: boolean; readonly bounds: GraphRefBounds; readonly connector: GraphRefConnector; }
 export interface GraphHead { readonly targetKind: "branch" | "commit"; readonly targetCommitId: string; readonly x: number; readonly y: number; readonly targetY: number; }
 
 const X_STEP = 154;
 const Y_STEP = 56;
 const PADDING_X = 40;
 const PADDING_Y = 32;
+const LOCAL_REF_WIDTH = 96;
+const REF_HEIGHT = 20;
+const REF_Y = 48;
+const REF_FAN_STEP = 112;
 
 export function createCommitGraphPresentation(state: RepositoryState): CommitGraphPresentation {
   if (state.history.length === 0) {
@@ -90,16 +96,30 @@ export function createCommitGraphPresentation(state: RepositoryState): CommitGra
     const maxRank = Math.max(...ranks.values());
     const maxLane = Math.max(...lanes.values());
     const grouped = new Map<string, typeof state.localBranches>(); for (const branch of state.localBranches.filter((branch) => nodeById.has(branch.tipCommitId))) grouped.set(branch.tipCommitId, [...(grouped.get(branch.tipCommitId) ?? []), branch]);
-    const localBranches = [...grouped.entries()].flatMap(([targetCommitId, branches]) => [...branches].sort((a, b) => a.name.localeCompare(b.name)).map((branch, index) => ({ kind: "local" as const, label: branch.name, targetCommitId, x: nodeById.get(targetCommitId)!.x, y: 48 + index * 22, targetY: nodeById.get(targetCommitId)!.y, current: state.currentLocation.kind === "branch" && branch.name === state.currentLocation.branchName })));
+    const localBranches = [...grouped.entries()].flatMap(([targetCommitId, branches]) => {
+      const target = nodeById.get(targetCommitId)!;
+      const isCurrent = (branch: typeof branches[number]) => state.currentLocation.kind === "branch" && branch.name === state.currentLocation.branchName;
+      const orderedBranches = [...branches].sort((left, right) => Number(isCurrent(right)) - Number(isCurrent(left)) || left.name.localeCompare(right.name));
+      return orderedBranches.map((branch, index) => localRef(branch.name, targetCommitId, target.x + index * REF_FAN_STEP, REF_Y, target.x, target.y, isCurrent(branch)));
+    });
     const trackingFacts = state.remotes.kind !== "available" ? [] : state.remotes.value.flatMap((remote) => remote.trackingRefs.map((ref) => ({ remoteName: remote.name, branchName: ref.branchName, commitId: ref.commitId }))).filter((ref) => nodeById.has(ref.commitId));
     const trackingGroups = new Map<string, typeof trackingFacts>(); for (const ref of trackingFacts) trackingGroups.set(ref.commitId, [...(trackingGroups.get(ref.commitId) ?? []), ref]);
-    const remoteTrackingRefs = [...trackingGroups.entries()].flatMap(([targetCommitId, refs]) => [...refs].sort((a, b) => a.remoteName.localeCompare(b.remoteName) || a.branchName.localeCompare(b.branchName)).map((ref, index) => ({ kind: "remoteTracking" as const, label: `${ref.remoteName}/${ref.branchName}`, targetCommitId, x: nodeById.get(targetCommitId)!.x, y: nodeById.get(targetCommitId)!.y + 30 + index * 22, targetY: nodeById.get(targetCommitId)!.y, current: false })));
+    const remoteTrackingRefs = [...trackingGroups.entries()].flatMap(([targetCommitId, refs]) => [...refs].sort((a, b) => a.remoteName.localeCompare(b.remoteName) || a.branchName.localeCompare(b.branchName)).map((ref, index) => { const target = nodeById.get(targetCommitId)!; return graphRef("remoteTracking", `${ref.remoteName}/${ref.branchName}`, targetCommitId, target.x, target.y + 30 + index * 22, target.x, target.y, false, 104); }));
     const currentBranch = localBranches.find((branch) => branch.current);
     const head = state.currentLocation.kind === "branch" && currentBranch ? { targetKind: "branch" as const, targetCommitId: state.currentLocation.head.id, x: currentBranch.x, y: 18, targetY: currentBranch.y - 12 } : state.currentLocation.kind === "detached" && nodeById.has(state.currentLocation.head.id) ? { targetKind: "commit" as const, targetCommitId: state.currentLocation.head.id, x: nodeById.get(state.currentLocation.head.id)!.x, y: 30, targetY: nodeById.get(state.currentLocation.head.id)!.y - 8 } : undefined;
-    return { kind: "graph", nodes, edges, omissions, localBranches, remoteTrackingRefs, head, width: PADDING_X * 2 + (maxRank + 1) * X_STEP + 180, height: PADDING_Y * 2 + (maxLane + 1) * Y_STEP + 96 };
+    const refRight = Math.max(0, ...localBranches.map((branch) => branch.bounds.left + branch.bounds.width));
+    return { kind: "graph", nodes, edges, omissions, localBranches, remoteTrackingRefs, head, width: Math.max(PADDING_X * 2 + (maxRank + 1) * X_STEP + 180, refRight + PADDING_X), height: PADDING_Y * 2 + (maxLane + 1) * Y_STEP + 96 };
   } catch {
     return unavailable();
   }
+}
+
+function localRef(label: string, targetCommitId: string, x: number, y: number, targetX: number, targetY: number, current: boolean): GraphRef {
+  return graphRef("local", label, targetCommitId, x, y, targetX, targetY, current, LOCAL_REF_WIDTH);
+}
+
+function graphRef(kind: GraphRef["kind"], label: string, targetCommitId: string, x: number, y: number, targetX: number, targetY: number, current: boolean, width: number): GraphRef {
+  return { kind, label, targetCommitId, x, y, targetY, current, bounds: { left: x - width / 2, top: y - REF_HEIGHT / 2, width, height: REF_HEIGHT }, connector: { fromX: x, fromY: y + REF_HEIGHT / 2, toX: targetX, toY: targetY - 8 } };
 }
 
 function ranksFor(entries: ReadonlyMap<string, { readonly parentIds: readonly string[] }>): ReadonlyMap<string, number> {

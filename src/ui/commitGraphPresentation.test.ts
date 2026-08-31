@@ -61,15 +61,36 @@ test("unborn and out-of-snapshot refs have no fake commit target", () => {
   assert.deepEqual(result.localBranches.map((ref) => ref.label), ["visible"]); assert.deepEqual(result.remoteTrackingRefs.map((ref) => ref.label), ["origin/main"]); assert.equal(result.nodes.some((node) => node.commitId === hidden), false);
 });
 
-test("ref overlays use current branch coordinates and avoid local/remote collisions", () => {
+test("same-target local branch fan-out keeps HEAD and branch connectors outside other labels", () => {
   const only = commit("a");
-  const result = graph([only], { currentLocation: { kind: "branch", branchName: "zzz-current", head: only.commit, detached: false }, localBranches: [{ name: "aaa", tipCommitId: only.commit.id }, { name: "zzz-current", tipCommitId: only.commit.id }], remotes: { kind: "available", value: [{ name: "fork", trackingRefs: [{ branchName: "main", trackingRef: "refs/cache/fork", commitId: only.commit.id }], locallyKnownDefaultBranch: null }, { name: "origin", trackingRefs: [{ branchName: "main", trackingRef: "refs/cache/origin", commitId: only.commit.id }], locallyKnownDefaultBranch: null }] } });
+  const result = graph([only], { currentLocation: { kind: "branch", branchName: "main", head: only.commit, detached: false }, localBranches: [{ name: "feature/test", tipCommitId: only.commit.id }, { name: "main", tipCommitId: only.commit.id }], remotes: { kind: "available", value: [{ name: "fork", trackingRefs: [{ branchName: "main", trackingRef: "refs/cache/fork", commitId: only.commit.id }], locallyKnownDefaultBranch: null }, { name: "origin", trackingRefs: [{ branchName: "main", trackingRef: "refs/cache/origin", commitId: only.commit.id }], locallyKnownDefaultBranch: null }] } });
   const current = result.localBranches.find((branch) => branch.current)!;
-  assert.equal(result.head?.x, current.x); assert.equal(result.head?.targetY, current.y - 12);
-  assert.equal(new Set(result.localBranches.map((branch) => branch.y)).size, 2);
+  const nonCurrent = result.localBranches.find((branch) => !branch.current)!;
+  assert.equal(current.label, "main");
+  assert.equal(result.head?.x, current.x); assert.equal(result.head?.targetY, current.bounds.top - 2);
+  assert.equal(result.head?.targetKind, "branch");
+  assert.equal(result.head?.targetCommitId, only.commit.id);
+  assert.equal(intersects(result.head!.x, result.head!.y + 8, result.head!.x, result.head!.targetY, nonCurrent.bounds), false);
+  assert.equal(intersects(current.connector.fromX, current.connector.fromY, current.connector.toX, current.connector.toY, nonCurrent.bounds), false);
+  assert.equal(intersects(nonCurrent.connector.fromX, nonCurrent.connector.fromY, nonCurrent.connector.toX, nonCurrent.connector.toY, current.bounds), false);
+  assert.equal(result.nodes.length, 1);
   assert.equal(new Set(result.remoteTrackingRefs.map((ref) => ref.y)).size, 2);
   assert.ok(result.remoteTrackingRefs.every((ref) => !result.localBranches.some((branch) => branch.y === ref.y)));
   assert.deepEqual(result.remoteTrackingRefs.map((ref) => ref.label), ["fork/main", "origin/main"]);
+});
+
+test("four same-target local branches have non-overlapping labels and connectors", () => {
+  const only = commit("a");
+  const result = graph([only], { currentLocation: { kind: "branch", branchName: "main", head: only.commit, detached: false }, localBranches: ["alpha", "feature/test", "main", "release"].map((name) => ({ name, tipCommitId: only.commit.id })) });
+  assert.equal(result.nodes.length, 1);
+  assert.equal(result.localBranches.length, 4);
+  assert.equal(result.localBranches.find((branch) => branch.current)?.label, "main");
+  for (const branch of result.localBranches) {
+    for (const other of result.localBranches) {
+      if (branch === other) continue;
+      assert.equal(intersects(branch.connector.fromX, branch.connector.fromY, branch.connector.toX, branch.connector.toY, other.bounds), false);
+    }
+  }
 });
 
 test("same current and base commit carries both roles; unavailable comparison keeps graph", () => {
@@ -131,6 +152,18 @@ function nodeById(result: ReturnType<typeof graph>, commitId: string) {
   const found = result.nodes.find((item) => item.commitId === commitId);
   assert.ok(found);
   return found;
+}
+
+function intersects(x1: number, y1: number, x2: number, y2: number, bounds: { readonly left: number; readonly top: number; readonly width: number; readonly height: number }): boolean {
+  const xInterval = interiorInterval(x1, x2 - x1, bounds.left, bounds.left + bounds.width);
+  const yInterval = interiorInterval(y1, y2 - y1, bounds.top, bounds.top + bounds.height);
+  if (!xInterval || !yInterval) return false;
+  return Math.max(0, xInterval[0], yInterval[0]) < Math.min(1, xInterval[1], yInterval[1]);
+}
+
+function interiorInterval(start: number, delta: number, minimum: number, maximum: number): readonly [number, number] | undefined {
+  if (delta === 0) return start > minimum && start < maximum ? [-Infinity, Infinity] : undefined;
+  return [(minimum - start) / delta, (maximum - start) / delta].sort((left, right) => left - right) as [number, number];
 }
 
 function state(history: readonly HistoryCommit[]): RepositoryState {
