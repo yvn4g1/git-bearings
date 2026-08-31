@@ -16,7 +16,8 @@ function availableMap(presentation: GitMapPresentation): string {
 }
 
 function renderCommitGraph(graph: CommitGraphPresentation): string {
-  if (graph.kind !== "graph") return graph.localBranches[0] ? `<p class="unborn-head">HEAD<br />↓<br /><span class="unborn-branch">[ ${escapeHtml(graph.localBranches[0].label)} ]</span></p><p class="muted">${escapeHtml(graph.message ?? "")}</p>` : `<p class="muted">${escapeHtml(graph.message ?? "")}</p>`;
+  if (graph.kind === "unborn") return `<p class="unborn-head">HEAD<br />↓<br /><span class="unborn-branch">[ ${escapeHtml(graph.unbornBranch ?? "")} ]</span></p><p class="muted">${escapeHtml(graph.message ?? "")}</p>`;
+  if (graph.kind !== "graph") return `<p class="muted">${escapeHtml(graph.message ?? "")}</p>`;
   const edges = graph.edges.map((edge) => `<path class="graph-edge" d="M ${edge.parentX + 7} ${edge.parentY} C ${edge.parentX + 42} ${edge.parentY}, ${edge.childX - 42} ${edge.childY}, ${edge.childX - 7} ${edge.childY}" />`).join("");
   const omissions = graph.omissions.map((omission) => `<text class="graph-omission" x="${omission.x}" y="${omission.y + 4}" text-anchor="middle">… 履歴を省略 …</text>`).join("");
   const refs = graph.localBranches.map((ref) => `<g class="local-branch-ref"><path class="ref-line" d="M ${ref.x} ${ref.y + 12} L ${ref.x} ${ref.targetY - 8}" /><rect class="local-ref" x="${ref.x - 48}" y="${ref.y - 12}" width="96" height="20" rx="5" /><text class="graph-text" x="${ref.x}" y="${ref.y + 2}" text-anchor="middle">${escapeHtml(ref.label)}</text></g>`).join("");

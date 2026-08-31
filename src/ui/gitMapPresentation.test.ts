@@ -25,7 +25,7 @@ test("working tree buckets retain their factual counts", () => {
 
 test("local repository graph uses actual current state and creates no unborn commit", () => {
   const unborn = presentation({ currentLocation: { kind: "unborn", branchName: "main", head: null, detached: false }, history: [] });
-  assert.equal(unborn.graph.kind, "empty");
+  assert.equal(unborn.graph.kind, "unborn");
   assert.equal(unborn.graph.nodes.some((node) => node.shortId === "aaaaaaa"), false);
   assert.equal(presentation({ history: [{ commit, parentIds: [] }] }).graph.nodes[0].subject, "subject");
 });
