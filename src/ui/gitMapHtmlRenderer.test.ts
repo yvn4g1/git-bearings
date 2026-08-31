@@ -18,6 +18,7 @@ test("Git Map renderer escapes repository-derived strings and preserves CSP", ()
   assert.ok(!html.includes(">CURRENT<"));
   assert.ok(!html.includes("BRANCH POINT"));
   assert.ok(!html.includes("BRANCH CREATED HERE"));
+  assert.ok(html.includes("local-branch-ref") === false);
 });
 
 function presentation(): GitMapPresentation {

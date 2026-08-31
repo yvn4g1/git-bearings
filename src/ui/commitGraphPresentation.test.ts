@@ -53,6 +53,17 @@ test("detached HEAD has no branch label and unborn history creates no commit", (
   assert.equal(graph([], { currentLocation: { kind: "unborn", branchName: "main", head: null, detached: false } }).nodes.length, 0);
 });
 
+test("ref overlays use current branch coordinates and avoid local/remote collisions", () => {
+  const only = commit("a");
+  const result = graph([only], { currentLocation: { kind: "branch", branchName: "zzz-current", head: only.commit, detached: false }, localBranches: [{ name: "aaa", tipCommitId: only.commit.id }, { name: "zzz-current", tipCommitId: only.commit.id }], remotes: { kind: "available", value: [{ name: "fork", trackingRefs: [{ branchName: "main", trackingRef: "refs/cache/fork", commitId: only.commit.id }], locallyKnownDefaultBranch: null }, { name: "origin", trackingRefs: [{ branchName: "main", trackingRef: "refs/cache/origin", commitId: only.commit.id }], locallyKnownDefaultBranch: null }] } });
+  const current = result.localBranches.find((branch) => branch.current)!;
+  assert.equal(result.head?.x, current.x); assert.equal(result.head?.targetY, current.y - 12);
+  assert.equal(new Set(result.localBranches.map((branch) => branch.y)).size, 2);
+  assert.equal(new Set(result.remoteTrackingRefs.map((ref) => ref.y)).size, 2);
+  assert.ok(result.remoteTrackingRefs.every((ref) => !result.localBranches.some((branch) => branch.y === ref.y)));
+  assert.deepEqual(result.remoteTrackingRefs.map((ref) => ref.label), ["fork/main", "origin/main"]);
+});
+
 test("same current and base commit carries both roles; unavailable comparison keeps graph", () => {
   const only = commit("a");
   const same = graph([only], { localBranches: [{ name: "feature", tipCommitId: only.commit.id }], comparison: { kind: "available", value: { baseRef: "refs/heads/feature", mergeBase: only.commit, ahead: 0, behind: 0 } } });
