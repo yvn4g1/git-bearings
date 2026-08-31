@@ -14,9 +14,12 @@ test("Git Map renderer escapes repository-derived strings and preserves CSP", ()
   assert.ok(html.includes("↓ commit：Staging内容からcommitを作成"));
   assert.ok(!html.includes(">↓ add<"));
   assert.ok(!html.includes(">↓ commit<"));
+  assert.ok(html.includes("CURRENT BASE COMMON ANCESTOR"));
+  assert.ok(!html.includes("BRANCH POINT"));
+  assert.ok(!html.includes("BRANCH CREATED HERE"));
 });
 
 function presentation(): GitMapPresentation {
   const snapshot = { kind: "empty" as const };
-  return { status: "available", repository: `<script>`, operationBanner: `<img src=x>`, workingTree: [{ label: "Modified", value: "0" }], staging: { label: "Staged", value: "0" }, graph: { kind: "graph", nodes: [{ commitId: "id", shortId: "abc", subject: `<script>`, x: 20, y: 20, roles: [] }], edges: [], omissions: [], width: 200, height: 80 }, remotes: [{ name: `<img src=x>`, facts: [] }], upstream: [], detailSnapshot: snapshot };
+  return { status: "available", repository: `<script>`, operationBanner: `<img src=x>`, workingTree: [{ label: "Modified", value: "0" }], staging: { label: "Staged", value: "0" }, graph: { kind: "graph", nodes: [{ commitId: "id", shortId: "abc", subject: `<script>`, x: 20, y: 20, roles: ["current", "base", "mergeBase"] }], edges: [], omissions: [], width: 200, height: 80 }, remotes: [{ name: `<img src=x>`, facts: [] }], upstream: [], detailSnapshot: snapshot };
 }

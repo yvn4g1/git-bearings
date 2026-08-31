@@ -19,7 +19,11 @@ function renderCommitGraph(graph: CommitGraphPresentation): string {
   const edges = graph.edges.map((edge) => `<path class="graph-edge" d="M ${edge.parentX + 7} ${edge.parentY} C ${edge.parentX + 42} ${edge.parentY}, ${edge.childX - 42} ${edge.childY}, ${edge.childX - 7} ${edge.childY}" />`).join("");
   const omissions = graph.omissions.map((omission) => `<text class="graph-omission" x="${omission.x}" y="${omission.y + 4}" text-anchor="middle">… 履歴を省略 …</text>`).join("");
   const nodes = graph.nodes.map((node) => {
-    const roles = `${node.roles.includes("current") ? "CURRENT " : ""}${node.roles.includes("base") ? "BASE" : ""}`.trim();
+    const roles = [
+      ...(node.roles.includes("current") ? ["CURRENT"] : []),
+      ...(node.roles.includes("base") ? ["BASE"] : []),
+      ...(node.roles.includes("mergeBase") ? ["COMMON ANCESTOR"] : []),
+    ].join(" ");
     return `<g><circle class="graph-node${node.roles.includes("current") ? " graph-node-current" : ""}${node.roles.includes("base") ? " graph-node-base" : ""}" cx="${node.x}" cy="${node.y}" r="7" /><text class="graph-text" x="${node.x + 13}" y="${node.y - 5}">${escapeHtml(node.shortId)}</text><text class="graph-text graph-subject" x="${node.x + 13}" y="${node.y + 12}">${escapeHtml(node.subject)}</text>${roles ? `<text class="graph-role" x="${node.x}" y="${node.y - 14}" text-anchor="middle">${roles}</text>` : ""}</g>`;
   }).join("");
   return `<div class="graph-scroll"><svg class="commit-graph" role="img" aria-label="Commit Graph: old to new" width="${graph.width}" height="${graph.height}" viewBox="0 0 ${graph.width} ${graph.height}" xmlns="http://www.w3.org/2000/svg">${edges}${omissions}${nodes}</svg></div>`;

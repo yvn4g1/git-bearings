@@ -61,12 +61,44 @@ test("remote base resolution and unrelated histories never invent a common edge"
   assert.equal(result.nodes.some((item) => item.roles.includes("mergeBase")), false);
 });
 
+test("bounded history is rendered as supplied without inventing or trimming commits", () => {
+  const externalParentId = "f".repeat(40);
+  const bounded = Array.from({ length: 51 }, (_, index): HistoryCommit => {
+    const commitId = index.toString(16).padStart(40, "0");
+    const parentId = index === 0 ? externalParentId : (index - 1).toString(16).padStart(40, "0");
+    return { commit: { id: commitId, shortId: commitId.slice(0, 7), subject: `commit ${index}` }, parentIds: [parentId] };
+  });
+  const root: HistoryCommit = { commit: { id: "e".repeat(40), shortId: "eeeeeee", subject: "root" }, parentIds: [] };
+  const current = bounded[50].commit;
+  const base = bounded[40].commit;
+  const mergeBase = bounded[20].commit;
+  const result = graph([...bounded, root], {
+    currentLocation: { kind: "branch", branchName: "feature", head: current, detached: false },
+    localBranches: [{ name: "feature", tipCommitId: current.id }, { name: "base", tipCommitId: base.id }],
+    comparison: { kind: "available", value: { baseRef: "refs/heads/base", mergeBase, ahead: 10, behind: 0 } },
+  });
+  assert.equal(result.nodes.length, 52);
+  assert.deepEqual(new Set(result.nodes.map((node) => node.commitId)), new Set([...bounded, root].map((entry) => entry.commit.id)));
+  assert.equal(result.nodes.some((node) => node.commitId === externalParentId), false);
+  assert.deepEqual(result.omissions.map((item) => item.childCommitId), [bounded[0].commit.id]);
+  assert.equal(result.omissions.some((item) => item.childCommitId === root.commit.id), false);
+  assert.ok(nodeById(result, current.id).roles.includes("current"));
+  assert.ok(nodeById(result, base.id).roles.includes("base"));
+  assert.ok(nodeById(result, mergeBase.id).roles.includes("mergeBase"));
+});
+
 function graph(history: readonly HistoryCommit[], overrides: Partial<RepositoryState> = {}) {
   return createCommitGraphPresentation({ ...state(history), ...overrides });
 }
 
 function node(result: ReturnType<typeof graph>, value: string) {
   const found = result.nodes.find((item) => item.commitId === id(value));
+  assert.ok(found);
+  return found;
+}
+
+function nodeById(result: ReturnType<typeof graph>, commitId: string) {
+  const found = result.nodes.find((item) => item.commitId === commitId);
   assert.ok(found);
   return found;
 }
