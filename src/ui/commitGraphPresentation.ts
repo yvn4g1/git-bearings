@@ -34,7 +34,12 @@ export interface CommitGraphPresentation {
   readonly width: number;
   readonly height: number;
   readonly message?: string;
+  readonly localBranches: readonly GraphRef[];
+  readonly remoteTrackingRefs: readonly GraphRef[];
+  readonly head?: GraphHead;
 }
+export interface GraphRef { readonly kind: "local" | "remoteTracking"; readonly label: string; readonly targetCommitId: string; readonly x: number; readonly y: number; readonly current: boolean; }
+export interface GraphHead { readonly targetKind: "branch" | "commit"; readonly targetCommitId: string; readonly targetLabel?: string; readonly x: number; readonly y: number; }
 
 const X_STEP = 154;
 const Y_STEP = 56;
@@ -65,7 +70,7 @@ export function createCommitGraphPresentation(state: RepositoryState): CommitGra
       if (commitId === currentId) roles.push("current");
       if (commitId === baseId) roles.push("base");
       if (commitId === mergeBaseId) roles.push("mergeBase");
-      return { commitId, shortId: entry.shortId, subject: entry.subject, x: PADDING_X + ranks.get(commitId)! * X_STEP, y: PADDING_Y + lanes.get(commitId)! * Y_STEP, roles };
+      return { commitId, shortId: entry.shortId, subject: entry.subject, x: PADDING_X + ranks.get(commitId)! * X_STEP, y: PADDING_Y + lanes.get(commitId)! * Y_STEP + 72, roles };
     });
     const nodeById = new Map(nodes.map((node) => [node.commitId, node]));
     const edges: CommitGraphEdge[] = [];
@@ -83,7 +88,10 @@ export function createCommitGraphPresentation(state: RepositoryState): CommitGra
     }
     const maxRank = Math.max(...ranks.values());
     const maxLane = Math.max(...lanes.values());
-    return { kind: "graph", nodes, edges, omissions, width: PADDING_X * 2 + (maxRank + 1) * X_STEP + 180, height: PADDING_Y * 2 + (maxLane + 1) * Y_STEP + 24 };
+    const localBranches = state.localBranches.filter((branch) => nodeById.has(branch.tipCommitId)).sort((a, b) => a.name.localeCompare(b.name)).map((branch, index) => ({ kind: "local" as const, label: branch.name, targetCommitId: branch.tipCommitId, x: nodeById.get(branch.tipCommitId)!.x, y: 48 - index * 22, current: state.currentLocation.kind === "branch" && branch.name === state.currentLocation.branchName }));
+    const remoteTrackingRefs = state.remotes.kind !== "available" ? [] : state.remotes.value.flatMap((remote) => remote.trackingRefs.filter((ref) => nodeById.has(ref.commitId)).map((ref, index) => ({ kind: "remoteTracking" as const, label: `${remote.name}/${ref.branchName}`, targetCommitId: ref.commitId, x: nodeById.get(ref.commitId)!.x, y: 48 - index * 22, current: false })));
+    const head = state.currentLocation.kind === "branch" ? localBranches.find((branch) => branch.current) && { targetKind: "branch" as const, targetCommitId: state.currentLocation.head.id, targetLabel: state.currentLocation.branchName, x: nodeById.get(state.currentLocation.head.id)?.x ?? 0, y: 18 } : state.currentLocation.kind === "detached" && nodeById.has(state.currentLocation.head.id) ? { targetKind: "commit" as const, targetCommitId: state.currentLocation.head.id, x: nodeById.get(state.currentLocation.head.id)!.x, y: 30 } : undefined;
+    return { kind: "graph", nodes, edges, omissions, localBranches, remoteTrackingRefs, head, width: PADDING_X * 2 + (maxRank + 1) * X_STEP + 180, height: PADDING_Y * 2 + (maxLane + 1) * Y_STEP + 96 };
   } catch {
     return unavailable();
   }
@@ -134,5 +142,5 @@ function resolveBaseTip(state: RepositoryState): string | undefined {
   return ids.length === 1 ? ids[0] : undefined;
 }
 
-function empty(message: string): CommitGraphPresentation { return { kind: "empty", nodes: [], edges: [], omissions: [], width: 0, height: 0, message }; }
-function unavailable(): CommitGraphPresentation { return { kind: "unavailable", nodes: [], edges: [], omissions: [], width: 0, height: 0, message: "履歴の関係を安全に表示できません" }; }
+function empty(message: string): CommitGraphPresentation { return { kind: "empty", nodes: [], edges: [], omissions: [], localBranches: [], remoteTrackingRefs: [], width: 0, height: 0, message }; }
+function unavailable(): CommitGraphPresentation { return { kind: "unavailable", nodes: [], edges: [], omissions: [], localBranches: [], remoteTrackingRefs: [], width: 0, height: 0, message: "履歴の関係を安全に表示できません" }; }

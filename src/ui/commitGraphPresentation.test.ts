@@ -36,10 +36,21 @@ test("missing parents become omission markers while roots do not", () => {
 
 test("current, base, and merge-base are resolved by facts rather than array position", () => {
   const a = commit("a"); const b = commit("b", ["a"]); const c = commit("c", ["a"]);
-  const result = graph([a, b, c], { currentLocation: { kind: "branch", branchName: "feature", head: c.commit, detached: false }, localBranches: [{ name: "base", tipCommitId: b.commit.id }], comparison: { kind: "available", value: { baseRef: "refs/heads/base", mergeBase: a.commit, ahead: 1, behind: 1 } } });
+  const result = graph([a, b, c], { currentLocation: { kind: "branch", branchName: "feature", head: c.commit, detached: false }, localBranches: [{ name: "feature", tipCommitId: c.commit.id }, { name: "base", tipCommitId: b.commit.id }], comparison: { kind: "available", value: { baseRef: "refs/heads/base", mergeBase: a.commit, ahead: 1, behind: 1 } } });
   assert.ok(node(result, "c").roles.includes("current"));
   assert.ok(node(result, "b").roles.includes("base"));
   assert.ok(node(result, "a").roles.includes("mergeBase"));
+  assert.equal(result.head?.targetKind, "branch");
+  assert.equal(result.head?.targetCommitId, c.commit.id);
+  assert.equal(result.localBranches.find((branch) => branch.current)?.targetCommitId, c.commit.id);
+});
+
+test("detached HEAD has no branch label and unborn history creates no commit", () => {
+  const only = commit("a");
+  const detached = graph([only], { currentLocation: { kind: "detached", branchName: null, head: only.commit, detached: true }, localBranches: [] });
+  assert.equal(detached.head?.targetKind, "commit");
+  assert.equal(detached.localBranches.length, 0);
+  assert.equal(graph([], { currentLocation: { kind: "unborn", branchName: "main", head: null, detached: false } }).nodes.length, 0);
 });
 
 test("same current and base commit carries both roles; unavailable comparison keeps graph", () => {

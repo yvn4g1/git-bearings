@@ -35,14 +35,15 @@ export function createGitMapPresentation(snapshot: RepositoryStateSnapshot): Git
 }
 
 function unavailable(snapshot: Exclude<RepositoryStateSnapshot, { kind: "available" }>, message: string, reason?: string): GitMapPresentation {
-  return { status: snapshot.kind, repository: snapshot.kind === "empty" ? undefined : snapshot.rootPath, message, unavailableReason: reason, workingTree: [], staging: { label: "Staged", value: "" }, graph: { kind: "empty", nodes: [], edges: [], omissions: [], width: 0, height: 0 }, remotes: [], upstream: [], detailSnapshot: snapshot };
+  return { status: snapshot.kind, repository: snapshot.kind === "empty" ? undefined : snapshot.rootPath, message, unavailableReason: reason, workingTree: [], staging: { label: "Staged", value: "" }, graph: { kind: "empty", nodes: [], edges: [], omissions: [], localBranches: [], remoteTrackingRefs: [], width: 0, height: 0 }, remotes: [], upstream: [], detailSnapshot: snapshot };
 }
 
 function remoteFacts(state: RepositoryState): Pick<GitMapPresentation, "remotes" | "remoteMessage" | "remoteUnavailableReason" | "upstream" | "upstreamUnavailableReason"> {
   const upstream = upstreamFacts(state);
   if (state.remotes.kind === "unavailable") return { remotes: [], remoteMessage: "Remote情報を取得できません", remoteUnavailableReason: state.remotes.reason, ...upstream };
   if (state.remotes.kind === "notConfigured" || state.remotes.value.length === 0) return { remotes: [], remoteMessage: "Remote は設定されていません", ...upstream };
-  return { remotes: state.remotes.value.map((remote) => ({ name: remote.name, facts: [{ label: "ローカルにある追跡ref", value: String(remote.trackingRefs.length) }, ...(remote.locallyKnownDefaultBranch ? [{ label: "ローカルで分かるdefault", value: `${remote.name}/${remote.locallyKnownDefaultBranch.branchName}` }] : [])] })), ...upstream };
+  const origin = state.remotes.value.find((remote) => remote.name === "origin");
+  return origin ? { remotes: [{ name: origin.name, facts: [{ label: "ローカルにある追跡ref", value: String(origin.trackingRefs.length) }, ...(origin.locallyKnownDefaultBranch ? [{ label: "ローカルで分かるdefault", value: `${origin.name}/${origin.locallyKnownDefaultBranch.branchName}` }] : [])] }], ...upstream } : { remotes: [], remoteMessage: "origin は設定されていません", ...upstream };
 }
 
 function upstreamFacts(state: RepositoryState): Pick<GitMapPresentation, "upstream" | "upstreamUnavailableReason"> {
