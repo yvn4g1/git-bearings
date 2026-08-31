@@ -34,7 +34,7 @@ export function createGitMapPresentation(snapshot: RepositoryStateSnapshot): Git
   const workingTree = state.workingTree;
   return {
     status: "available", repository: state.repository.rootPath, operationBanner: operationBanner(state),
-    workingTree: { kind: workingTree.staged.length || workingTree.unstaged.length || workingTree.untracked.length || workingTree.conflicts.length ? "changes" : "clean", unstagedCount: workingTree.unstaged.length, modifiedCount: workingTree.unstaged.filter((change) => change.kind === "modified").length, untrackedCount: workingTree.untracked.length, conflictsCount: workingTree.conflicts.length },
+    workingTree: { kind: workingTree.unstaged.length || workingTree.untracked.length || workingTree.conflicts.length ? "changes" : "clean", unstagedCount: workingTree.unstaged.length, modifiedCount: workingTree.unstaged.filter((change) => change.kind === "modified").length, untrackedCount: workingTree.untracked.length, conflictsCount: workingTree.conflicts.length },
     staging: { stagedCount: workingTree.staged.length }, stash: stashPresentation(state), graph: createCommitGraphPresentation(state), ...remoteFacts(state), detailSnapshot: snapshot,
   };
 }

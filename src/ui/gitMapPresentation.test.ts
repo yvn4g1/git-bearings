@@ -65,8 +65,10 @@ test("clean, same-path staging, stash, and remote states remain semantically sep
   assert.deepEqual(clean.workingTree, { kind: "clean", unstagedCount: 0, modifiedCount: 0, untrackedCount: 0, conflictsCount: 0 });
   assert.deepEqual(clean.staging, { stagedCount: 0 });
   assert.deepEqual(clean.stash, { kind: "none" });
+  const stagedOnly = presentation({ workingTree: { staged: [{ path: "a.ts", kind: "modified" }], unstaged: [], untracked: [], conflicts: [] } });
+  assert.equal(stagedOnly.workingTree.kind, "clean"); assert.equal(stagedOnly.workingTree.unstagedCount, 0); assert.equal(stagedOnly.workingTree.modifiedCount, 0); assert.equal(stagedOnly.staging.stagedCount, 1);
   const samePath = presentation({ workingTree: { staged: [{ path: "a.ts", kind: "modified" }], unstaged: [{ path: "a.ts", kind: "modified" }], untracked: [], conflicts: [] } });
-  assert.equal(samePath.staging.stagedCount, 1); assert.equal(samePath.workingTree.modifiedCount, 1); assert.equal(samePath.workingTree.unstagedCount, 1);
+  assert.equal(samePath.workingTree.kind, "changes"); assert.equal(samePath.staging.stagedCount, 1); assert.equal(samePath.workingTree.modifiedCount, 1); assert.equal(samePath.workingTree.unstagedCount, 1);
   assert.deepEqual(presentation({ stash: { kind: "available", value: [{ index: 0, commitId: oid, message: "one" }, { index: 1, commitId: oid, message: "two" }] } }).stash, { kind: "shelf", count: 2 });
   assert.deepEqual(presentation({ stash: { kind: "unavailable", reason: "stash failed" } }).stash, { kind: "unavailable", reason: "stash failed" });
   assert.equal(presentation({ remotes: { kind: "available", value: [] } }).remotes.length, 0);
