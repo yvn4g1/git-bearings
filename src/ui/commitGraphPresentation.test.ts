@@ -13,6 +13,7 @@ test("empty and linear histories are represented from parent facts", () => {
   assert.equal(result.edges.length, 2);
   assert.ok(result.edges.every((edge) => edge.parentX < edge.childX));
   assert.deepEqual(result.nodes.map((node) => node.commitId), [id("a"), id("b"), id("c")]);
+  assert.deepEqual(result.predictionCommits, []);
 });
 
 test("branches and all merge parents receive distinct factual edges", () => {

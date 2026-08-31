@@ -3,15 +3,20 @@ import { createCommitGraphPresentation, type CommitGraphPresentation } from "./c
 import type { RepositoryStateSnapshot } from "./repositoryStateSnapshot";
 
 export interface GitMapItem { readonly label: string; readonly value: string; }
-export interface GitMapRemote { readonly name: string; readonly facts: readonly GitMapItem[]; }
+export interface WorkingTreePresentation { readonly kind: "clean" | "changes"; readonly unstagedCount: number; readonly modifiedCount: number; readonly untrackedCount: number; readonly conflictsCount: number; }
+export interface StagingPresentation { readonly stagedCount: number; }
+export type StashPresentation = { readonly kind: "none" } | { readonly kind: "shelf"; readonly count: number } | { readonly kind: "unavailable"; readonly reason: string; };
+export interface GitMapUnknown { readonly label: string; readonly message: string; }
+export interface GitMapRemote { readonly name: string; readonly facts: readonly GitMapItem[]; readonly liveRemote: GitMapUnknown; }
 export interface GitMapPresentation {
   readonly status: "empty" | "loading" | "unavailable" | "available";
   readonly repository?: string;
   readonly message?: string;
   readonly unavailableReason?: string;
   readonly operationBanner?: string;
-  readonly workingTree: readonly GitMapItem[];
-  readonly staging: GitMapItem;
+  readonly workingTree: WorkingTreePresentation;
+  readonly staging: StagingPresentation;
+  readonly stash: StashPresentation;
   readonly graph: CommitGraphPresentation;
   readonly remotes: readonly GitMapRemote[];
   readonly remoteMessage?: string;
@@ -26,16 +31,21 @@ export function createGitMapPresentation(snapshot: RepositoryStateSnapshot): Git
   if (snapshot.kind === "loading") return unavailable(snapshot, "Git状態を読み取り中…");
   if (snapshot.kind === "unavailable") return unavailable(snapshot, "Git状態を安全に取得できません", snapshot.reason);
   const state = snapshot.state;
-  const modified = state.workingTree.unstaged.filter((change) => change.kind === "modified").length;
+  const workingTree = state.workingTree;
   return {
     status: "available", repository: state.repository.rootPath, operationBanner: operationBanner(state),
-    workingTree: [{ label: "Modified", value: String(modified) }, { label: "Unstaged", value: String(state.workingTree.unstaged.length) }, { label: "Untracked", value: String(state.workingTree.untracked.length) }, { label: "Conflicts", value: String(state.workingTree.conflicts.length) }],
-    staging: { label: "Staged", value: String(state.workingTree.staged.length) }, graph: createCommitGraphPresentation(state), ...remoteFacts(state), detailSnapshot: snapshot,
+    workingTree: { kind: workingTree.staged.length || workingTree.unstaged.length || workingTree.untracked.length || workingTree.conflicts.length ? "changes" : "clean", unstagedCount: workingTree.unstaged.length, modifiedCount: workingTree.unstaged.filter((change) => change.kind === "modified").length, untrackedCount: workingTree.untracked.length, conflictsCount: workingTree.conflicts.length },
+    staging: { stagedCount: workingTree.staged.length }, stash: stashPresentation(state), graph: createCommitGraphPresentation(state), ...remoteFacts(state), detailSnapshot: snapshot,
   };
 }
 
 function unavailable(snapshot: Exclude<RepositoryStateSnapshot, { kind: "available" }>, message: string, reason?: string): GitMapPresentation {
-  return { status: snapshot.kind, repository: snapshot.kind === "empty" ? undefined : snapshot.rootPath, message, unavailableReason: reason, workingTree: [], staging: { label: "Staged", value: "" }, graph: { kind: "empty", nodes: [], edges: [], omissions: [], localBranches: [], remoteTrackingRefs: [], width: 0, height: 0 }, remotes: [], upstream: [], detailSnapshot: snapshot };
+  return { status: snapshot.kind, repository: snapshot.kind === "empty" ? undefined : snapshot.rootPath, message, unavailableReason: reason, workingTree: { kind: "clean", unstagedCount: 0, modifiedCount: 0, untrackedCount: 0, conflictsCount: 0 }, staging: { stagedCount: 0 }, stash: { kind: "none" }, graph: { kind: "empty", nodes: [], edges: [], omissions: [], localBranches: [], remoteTrackingRefs: [], predictionCommits: [], width: 0, height: 0 }, remotes: [], upstream: [], detailSnapshot: snapshot };
+}
+
+function stashPresentation(state: RepositoryState): StashPresentation {
+  if (state.stash.kind === "unavailable") return { kind: "unavailable", reason: state.stash.reason };
+  return state.stash.value.length ? { kind: "shelf", count: state.stash.value.length } : { kind: "none" };
 }
 
 function remoteFacts(state: RepositoryState): Pick<GitMapPresentation, "remotes" | "remoteMessage" | "remoteUnavailableReason" | "upstream" | "upstreamUnavailableReason"> {
@@ -43,7 +53,7 @@ function remoteFacts(state: RepositoryState): Pick<GitMapPresentation, "remotes"
   if (state.remotes.kind === "unavailable") return { remotes: [], remoteMessage: "Remote情報を取得できません", remoteUnavailableReason: state.remotes.reason, ...upstream };
   if (state.remotes.kind === "notConfigured" || state.remotes.value.length === 0) return { remotes: [], remoteMessage: "Remote は設定されていません", ...upstream };
   const origin = state.remotes.value.find((remote) => remote.name === "origin");
-  return origin ? { remotes: [{ name: origin.name, facts: [{ label: "ローカルにある追跡ref", value: String(origin.trackingRefs.length) }, ...(origin.locallyKnownDefaultBranch ? [{ label: "ローカルで分かるdefault", value: `${origin.name}/${origin.locallyKnownDefaultBranch.branchName}` }] : [])] }], ...upstream } : { remotes: [], remoteMessage: "origin は設定されていません", ...upstream };
+  return origin ? { remotes: [{ name: origin.name, facts: [{ label: "ローカルにある追跡ref", value: String(origin.trackingRefs.length) }, ...(origin.locallyKnownDefaultBranch ? [{ label: "ローカルで分かるdefault", value: `${origin.name}/${origin.locallyKnownDefaultBranch.branchName}` }] : [])], liveRemote: { label: "live Remote", message: "未確認（自動fetchしません）" } }], ...upstream } : { remotes: [], remoteMessage: "origin は設定されていません", ...upstream };
 }
 
 function upstreamFacts(state: RepositoryState): Pick<GitMapPresentation, "upstream" | "upstreamUnavailableReason"> {

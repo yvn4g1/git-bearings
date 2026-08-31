@@ -9,7 +9,9 @@ export interface CommitGraphNode {
   readonly x: number;
   readonly y: number;
   readonly roles: readonly CommitGraphRole[];
+  readonly visualState?: "selected" | "related";
 }
+export interface PredictionCommit { readonly label: "Prediction"; readonly description: "NEW COMMIT"; readonly x: number; readonly y: number; readonly visualState?: "selected" | "related"; }
 
 export interface CommitGraphEdge {
   readonly parentCommitId: string;
@@ -38,6 +40,7 @@ export interface CommitGraphPresentation {
   readonly localBranches: readonly GraphRef[];
   readonly remoteTrackingRefs: readonly GraphRef[];
   readonly head?: GraphHead;
+  readonly predictionCommits?: readonly PredictionCommit[];
 }
 export interface GraphRefBounds { readonly left: number; readonly top: number; readonly width: number; readonly height: number; }
 export interface GraphRefConnector { readonly fromX: number; readonly fromY: number; readonly toX: number; readonly toY: number; }
@@ -108,7 +111,7 @@ export function createCommitGraphPresentation(state: RepositoryState): CommitGra
     const currentBranch = localBranches.find((branch) => branch.current);
     const head = state.currentLocation.kind === "branch" && currentBranch ? { targetKind: "branch" as const, targetCommitId: state.currentLocation.head.id, x: currentBranch.x, y: 18, targetY: currentBranch.y - 12 } : state.currentLocation.kind === "detached" && nodeById.has(state.currentLocation.head.id) ? { targetKind: "commit" as const, targetCommitId: state.currentLocation.head.id, x: nodeById.get(state.currentLocation.head.id)!.x, y: 30, targetY: nodeById.get(state.currentLocation.head.id)!.y - 8 } : undefined;
     const refRight = Math.max(0, ...localBranches.map((branch) => branch.bounds.left + branch.bounds.width));
-    return { kind: "graph", nodes, edges, omissions, localBranches, remoteTrackingRefs, head, width: Math.max(PADDING_X * 2 + (maxRank + 1) * X_STEP + 180, refRight + PADDING_X), height: PADDING_Y * 2 + (maxLane + 1) * Y_STEP + 96 };
+    return { kind: "graph", nodes, edges, omissions, localBranches, remoteTrackingRefs, head, predictionCommits: [], width: Math.max(PADDING_X * 2 + (maxRank + 1) * X_STEP + 180, refRight + PADDING_X), height: PADDING_Y * 2 + (maxLane + 1) * Y_STEP + 96 };
   } catch {
     return unavailable();
   }
@@ -167,6 +170,6 @@ function resolveBaseTip(state: RepositoryState): string | undefined {
   return ids.length === 1 ? ids[0] : undefined;
 }
 
-function empty(message: string): CommitGraphPresentation { return { kind: "empty", nodes: [], edges: [], omissions: [], localBranches: [], remoteTrackingRefs: [], width: 0, height: 0, message }; }
-function unborn(branchName: string): CommitGraphPresentation { return { kind: "unborn", nodes: [], edges: [], omissions: [], localBranches: [], remoteTrackingRefs: [], width: 0, height: 0, message: "まだ commit がありません", unbornBranch: branchName }; }
-function unavailable(): CommitGraphPresentation { return { kind: "unavailable", nodes: [], edges: [], omissions: [], localBranches: [], remoteTrackingRefs: [], width: 0, height: 0, message: "履歴の関係を安全に表示できません" }; }
+function empty(message: string): CommitGraphPresentation { return { kind: "empty", nodes: [], edges: [], omissions: [], localBranches: [], remoteTrackingRefs: [], predictionCommits: [], width: 0, height: 0, message }; }
+function unborn(branchName: string): CommitGraphPresentation { return { kind: "unborn", nodes: [], edges: [], omissions: [], localBranches: [], remoteTrackingRefs: [], predictionCommits: [], width: 0, height: 0, message: "まだ commit がありません", unbornBranch: branchName }; }
+function unavailable(): CommitGraphPresentation { return { kind: "unavailable", nodes: [], edges: [], omissions: [], localBranches: [], remoteTrackingRefs: [], predictionCommits: [], width: 0, height: 0, message: "履歴の関係を安全に表示できません" }; }
