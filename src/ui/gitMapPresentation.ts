@@ -1,4 +1,5 @@
 import type { RepositoryState } from "../domain/repositoryState";
+import type { SelectionState } from "../domain/appViewState";
 import { createCommitGraphPresentation, type CommitGraphPresentation } from "./commitGraphPresentation";
 import type { RepositoryStateSnapshot } from "./repositoryStateSnapshot";
 
@@ -24,9 +25,11 @@ export interface GitMapPresentation {
   readonly upstream: readonly GitMapItem[];
   readonly upstreamUnavailableReason?: string;
   readonly detailSnapshot: RepositoryStateSnapshot;
+  readonly selection?: SelectionState;
+  readonly detailIdentity?: string;
 }
 
-export function createGitMapPresentation(snapshot: RepositoryStateSnapshot): GitMapPresentation {
+export function createGitMapPresentation(snapshot: RepositoryStateSnapshot, selection: SelectionState = { kind: "overview" }): GitMapPresentation {
   if (snapshot.kind === "empty") return unavailable(snapshot, "Git状態をまだ読み取っていません");
   if (snapshot.kind === "loading") return unavailable(snapshot, "Git状態を読み取り中…");
   if (snapshot.kind === "unavailable") return unavailable(snapshot, "Git状態を安全に取得できません", snapshot.reason);
@@ -35,12 +38,30 @@ export function createGitMapPresentation(snapshot: RepositoryStateSnapshot): Git
   return {
     status: "available", repository: state.repository.rootPath, operationBanner: operationBanner(state),
     workingTree: { kind: workingTree.unstaged.length || workingTree.untracked.length || workingTree.conflicts.length ? "changes" : "clean", unstagedCount: workingTree.unstaged.length, modifiedCount: workingTree.unstaged.filter((change) => change.kind === "modified").length, untrackedCount: workingTree.untracked.length, conflictsCount: workingTree.conflicts.length },
-    staging: { stagedCount: workingTree.staged.length }, stash: stashPresentation(state), graph: createCommitGraphPresentation(state), ...remoteFacts(state), detailSnapshot: snapshot,
+    staging: { stagedCount: workingTree.staged.length }, stash: stashPresentation(state), graph: selectedGraph(createCommitGraphPresentation(state), state, selection), ...remoteFacts(state), detailSnapshot: snapshot, selection, detailIdentity: selectionIdentity(selection),
   };
 }
 
 function unavailable(snapshot: Exclude<RepositoryStateSnapshot, { kind: "available" }>, message: string, reason?: string): GitMapPresentation {
-  return { status: snapshot.kind, repository: snapshot.kind === "empty" ? undefined : snapshot.rootPath, message, unavailableReason: reason, workingTree: { kind: "clean", unstagedCount: 0, modifiedCount: 0, untrackedCount: 0, conflictsCount: 0 }, staging: { stagedCount: 0 }, stash: { kind: "none" }, graph: { kind: "empty", nodes: [], edges: [], omissions: [], localBranches: [], remoteTrackingRefs: [], predictionCommits: [], width: 0, height: 0 }, remotes: [], upstream: [], detailSnapshot: snapshot };
+  return { status: snapshot.kind, repository: snapshot.kind === "empty" ? undefined : snapshot.rootPath, message, unavailableReason: reason, workingTree: { kind: "clean", unstagedCount: 0, modifiedCount: 0, untrackedCount: 0, conflictsCount: 0 }, staging: { stagedCount: 0 }, stash: { kind: "none" }, graph: { kind: "empty", nodes: [], edges: [], omissions: [], localBranches: [], remoteTrackingRefs: [], predictionCommits: [], width: 0, height: 0 }, remotes: [], upstream: [], detailSnapshot: snapshot, selection: { kind: "overview" }, detailIdentity: "Overview" };
+}
+
+function selectedGraph(graph: CommitGraphPresentation, state: RepositoryState, selection: SelectionState): CommitGraphPresentation {
+  const primaryCommit = selection.kind === "commit" ? selection.commitId : undefined;
+  const branch = selection.kind === "branch" ? state.localBranches.find((item) => item.name === selection.branchName) : undefined;
+  const headId = state.currentLocation.kind === "unborn" ? undefined : state.currentLocation.head.id;
+  const headSelected = selection.kind === "head";
+  const revealTracking = selection.kind === "upstream" && selection.remoteName !== "." && state.upstream.kind === "available" && state.upstream.value.remoteName === selection.remoteName && state.upstream.value.branchName === selection.branchName;
+  return { ...graph,
+    nodes: graph.nodes.map((node) => ({ ...node, visualState: node.commitId === primaryCommit ? "selected" : node.commitId === branch?.tipCommitId || (headSelected && node.commitId === headId) ? "related" : undefined })),
+    localBranches: graph.localBranches.map((ref) => ({ ...ref, visualState: selection.kind === "branch" && ref.label === selection.branchName ? "selected" : ref.targetCommitId === primaryCommit || (headSelected && ref.current) ? "related" : undefined })),
+    remoteTrackingRefs: graph.remoteTrackingRefs.map((ref) => ({ ...ref, revealed: revealTracking && ref.label === `${selection.remoteName}/${selection.branchName}` })),
+    head: graph.head ? { ...graph.head, visualState: headSelected ? "selected" : selection.kind === "branch" && state.currentLocation.kind === "branch" && selection.branchName === state.currentLocation.branchName ? "related" : primaryCommit === headId ? "related" : undefined } : undefined,
+  };
+}
+
+function selectionIdentity(selection: SelectionState): string {
+  switch (selection.kind) { case "branch": return `branch ${selection.branchName}`; case "commit": return `commit ${selection.commitId.slice(0, 7)}`; case "workingTree": return selection.section === "overview" ? "Working Tree" : `Working Tree / ${selection.section}`; case "upstream": return `upstream ${selection.remoteName}/${selection.branchName}`; case "remote": return `Remote ${selection.remoteName}`; case "stash": return `stash ${selection.stashCommitId.slice(0, 7)}`; case "branchComparison": return `comparison ${selection.baseRef}`; case "unpushedCommits": return "local-only commits"; case "stashShelf": return "Stash Shelf"; case "head": return "HEAD"; case "staging": return "Staging"; case "overview": return "Overview"; }
 }
 
 function stashPresentation(state: RepositoryState): StashPresentation {

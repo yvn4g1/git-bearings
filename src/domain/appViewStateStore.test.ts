@@ -8,3 +8,14 @@ test("repository changes reset selection, detail mode, and preview", () => {
   store.resetForRepositoryChange();
   assert.deepEqual(store.current, { selection: { kind: "overview" }, detailMode: "inspect", preview: null });
 });
+
+test("selection notifies once and supports all UI-only identities", () => {
+  const store = new AppViewStateStore();
+  let changes = 0;
+  store.onDidChange(() => { changes += 1; });
+  store.select({ kind: "workingTree", section: "conflicts" });
+  store.select({ kind: "workingTree", section: "conflicts" });
+  store.select({ kind: "stashShelf" });
+  assert.equal(changes, 2);
+  assert.deepEqual(store.current.selection, { kind: "stashShelf" });
+});

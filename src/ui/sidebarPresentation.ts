@@ -1,4 +1,5 @@
 import type { AheadBehind, AvailabilityResult, FileChange, RepositoryState } from "../domain/repositoryState";
+import type { SelectionState } from "../domain/appViewState";
 import type { RepositoryStateSnapshot } from "./repositoryStateSnapshot";
 
 export type SidebarCollapsible = "none" | "collapsed" | "expanded";
@@ -6,6 +7,7 @@ export type SidebarCollapsible = "none" | "collapsed" | "expanded";
 export interface SidebarCommand {
   readonly command: string;
   readonly title: string;
+  readonly arguments?: any[];
 }
 
 export interface SidebarNode {
@@ -16,6 +18,7 @@ export interface SidebarNode {
   readonly collapsible: SidebarCollapsible;
   readonly children?: readonly SidebarNode[];
   readonly command?: SidebarCommand;
+  readonly selection?: SelectionState;
 }
 
 export function createSidebarPresentation(snapshot: RepositoryStateSnapshot): readonly SidebarNode[] {
@@ -41,27 +44,28 @@ function availablePresentation(state: RepositoryState): readonly SidebarNode[] {
 }
 
 function repositoryNode(rootPath: string): SidebarNode {
-  return leaf("repository", basename(rootPath), rootPath, rootPath);
+  return selectable("repository", basename(rootPath), { kind: "overview" }, rootPath, rootPath);
 }
 
 function currentLocationNode(state: RepositoryState): SidebarNode {
   const location = state.currentLocation;
   if (location.kind === "unborn") {
     return group("current", "あなたは今ここ", "Current location", [
-      leaf("current:branch", location.branchName),
-      leaf("current:unborn", "まだcommitがありません"),
+      selectable("current:branch", location.branchName, { kind: "branch", branchName: location.branchName }),
+      selectable("current:unborn", "まだcommitがありません", { kind: "head" }),
     ]);
   }
   const head = location.head;
   if (location.kind === "detached") {
     return group("current", "あなたは今ここ", "Current location", [
-      leaf("current:detached", "detached HEAD", head.shortId, `${head.shortId} ${head.subject}`),
-      leaf("current:subject", head.subject),
+      selectable("current:detached", "detached HEAD", { kind: "head" }, head.shortId, `${head.shortId} ${head.subject}`),
+      selectable("current:subject", head.subject, { kind: "commit", commitId: head.id }),
     ]);
   }
   return group("current", "あなたは今ここ", "Current location", [
-    leaf("current:branch", location.branchName, `HEAD ${head.shortId}`, `${head.shortId} ${head.subject}`),
-    leaf("current:subject", head.subject),
+    selectable("current:head", "HEAD", { kind: "head" }, location.branchName),
+    selectable("current:branch", location.branchName, { kind: "branch", branchName: location.branchName }, `HEAD ${head.shortId}`, `${head.shortId} ${head.subject}`),
+    selectable("current:subject", head.subject, { kind: "commit", commitId: head.id }),
   ]);
 }
 
@@ -83,7 +87,7 @@ function comparisonNode(state: RepositoryState): SidebarNode {
   const children = exactBase
     ? [leaf("comparison:exact-base", "現在、基準branch上です", base)]
     : [
-      leaf("comparison:ahead", `あなた側のみ ${value.ahead} commits`),
+      selectable("comparison:ahead", `あなた側のみ ${value.ahead} commits`, { kind: "branchComparison", baseRef: value.baseRef }),
       leaf("comparison:behind", `${base}側のみ ${value.behind} commits`),
     ];
   return group("comparison", "基準branchとの関係", "Comparison", [
@@ -94,11 +98,11 @@ function comparisonNode(state: RepositoryState): SidebarNode {
 function workingTreeNode(state: RepositoryState): SidebarNode {
   const tree = state.workingTree;
   const groups: SidebarNode[] = [];
-  if (tree.staged.length) groups.push(fileGroup("working:staged", "次のcommitに入る変更", "Staged", tree.staged));
-  if (tree.unstaged.length) groups.push(fileGroup("working:unstaged", "まだaddしていない変更", "Unstaged", tree.unstaged));
-  if (tree.untracked.length) groups.push(group("working:untracked", "未追跡", `Untracked · ${tree.untracked.length}件`, tree.untracked.map((path, index) => leaf(`working:untracked:${index}`, path)), "collapsed"));
-  if (tree.conflicts.length) groups.push(group("working:conflicts", "競合", `Conflicts · ${tree.conflicts.length}件`, tree.conflicts.map((file, index) => leaf(`working:conflicts:${index}`, file.path, file.kind)), "collapsed"));
-  return group("working", "作業中", groups.length ? "Working Tree" : "変更なし", groups.length ? groups : [leaf("working:clean", "変更なし")]);
+  if (tree.staged.length) groups.push({ ...fileGroup("working:staged", "次のcommitに入る変更", "Staged", tree.staged), selection: { kind: "staging" } });
+  if (tree.unstaged.length) groups.push({ ...fileGroup("working:unstaged", "まだaddしていない変更", "Unstaged", tree.unstaged), selection: { kind: "workingTree", section: "unstaged" } });
+  if (tree.untracked.length) groups.push({ ...group("working:untracked", "未追跡", `Untracked · ${tree.untracked.length}件`, tree.untracked.map((path, index) => leaf(`working:untracked:${index}`, path)), "collapsed"), selection: { kind: "workingTree", section: "untracked" } });
+  if (tree.conflicts.length) groups.push({ ...group("working:conflicts", "競合", `Conflicts · ${tree.conflicts.length}件`, tree.conflicts.map((file, index) => leaf(`working:conflicts:${index}`, file.path, file.kind)), "collapsed"), selection: { kind: "workingTree", section: "conflicts" } });
+  return { ...group("working", "作業中", groups.length ? "Working Tree" : "変更なし", groups.length ? groups : [leaf("working:clean", "変更なし")]), selection: { kind: "workingTree", section: "overview" } };
 }
 
 function upstreamNode(state: RepositoryState): SidebarNode {
@@ -108,12 +112,12 @@ function upstreamNode(state: RepositoryState): SidebarNode {
   const value = upstream.value;
   if (value.remoteName === ".") {
     return group("upstream", "追跡関係", "Upstream / Remote", [
-      leaf("upstream:local", `ローカルupstream: ${value.branchName}`),
+      selectable("upstream:local", `ローカルupstream: ${value.branchName}`, { kind: "upstream", remoteName: value.remoteName, branchName: value.branchName }),
       relationNode(value.relation),
     ]);
   }
   return group("upstream", "追跡関係", "Upstream / Remote", [
-    leaf("upstream:remote", `upstream: ${value.remoteName}/${value.branchName}`, "最後に取得したRemote情報", "これはlive Remote状態ではなく、ローカルGitが最後に取得したRemote情報です。"),
+    selectable("upstream:remote", `upstream: ${value.remoteName}/${value.branchName}`, { kind: "upstream", remoteName: value.remoteName, branchName: value.branchName }, "最後に取得したRemote情報", "これはlive Remote状態ではなく、ローカルGitが最後に取得したRemote情報です。"),
     relationNode(value.relation),
   ]);
 }
@@ -130,7 +134,7 @@ function stashNode(state: RepositoryState): SidebarNode | undefined {
   const stash = state.stash;
   if (stash.kind === "unavailable") return group("stash", "Stash", "取得できません", [leaf("stash:unavailable", "Stash情報を取得できません", undefined, stash.reason)]);
   if (stash.value.length === 0) return undefined;
-  return group("stash", "Stash", `${stash.value.length}件`, stash.value.map((entry) => leaf(`stash:${entry.index}`, `stash@{${entry.index}}`, entry.message, entry.commitId)), "collapsed");
+  return { ...group("stash", "Stash", `${stash.value.length}件`, stash.value.map((entry) => selectable(`stash:${entry.index}`, `stash@{${entry.index}}`, { kind: "stash", stashCommitId: entry.commitId }, entry.message, entry.commitId)), "collapsed"), selection: { kind: "stashShelf" } };
 }
 
 function displayBaseRef(state: RepositoryState, baseRef: string): string {
@@ -157,6 +161,10 @@ function group(id: string, label: string, description: string | undefined, child
 
 function leaf(id: string, label: string, description?: string, tooltip?: string): SidebarNode {
   return { id, label, description, tooltip, collapsible: "none" };
+}
+
+function selectable(id: string, label: string, selection: SelectionState, description?: string, tooltip?: string): SidebarNode {
+  return { ...leaf(id, label, description, tooltip), selection };
 }
 
 function basename(path: string): string {

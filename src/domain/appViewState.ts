@@ -6,12 +6,13 @@ export type SelectionState =
   | { readonly kind: "branchComparison"; readonly baseRef: string }
   | {
       readonly kind: "workingTree";
-      readonly section: "overview" | "unstaged" | "untracked";
+      readonly section: "overview" | "unstaged" | "untracked" | "conflicts";
     }
   | { readonly kind: "staging" }
   | { readonly kind: "upstream"; readonly remoteName: string; readonly branchName: string }
   | { readonly kind: "unpushedCommits"; readonly upstreamRef: string }
   | { readonly kind: "remote"; readonly remoteName: string }
+  | { readonly kind: "stashShelf" }
   | { readonly kind: "stash"; readonly stashCommitId: string };
 
 export type DetailMode = "inspect" | "commandInput";

@@ -27,9 +27,9 @@ interface GitExtensionExports { getAPI(version: 1): GitApiLike; }
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const outputChannel = vscode.window.createOutputChannel("Git Bearings");
   const snapshotStore = new RepositoryStateSnapshotStore();
-  const sidebar = createGitBearingsSidebar(snapshotStore);
-  const gitMapPanel = new GitMapPanel(snapshotStore);
   const appViewState = new AppViewStateStore<unknown>();
+  const sidebar = createGitBearingsSidebar(snapshotStore, appViewState);
+  const gitMapPanel = new GitMapPanel(snapshotStore, appViewState);
   const basePreference = new BasePreferenceController({
     read: () => context.workspaceState.get<unknown>(BASE_PREFERENCE_KEY),
     write: (value) => context.workspaceState.update(BASE_PREFERENCE_KEY, value),
@@ -121,6 +121,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     refreshController,
     vscode.commands.registerCommand("gitBearings.selectRepository", selectRepository),
     vscode.commands.registerCommand("gitBearings.selectBaseBranch", selectBaseBranch),
+    vscode.commands.registerCommand("gitBearings.selectSelection", (selection: unknown) => {
+      const parsed = parseSelection(selection);
+      if (parsed) appViewState.select(parsed);
+    }),
     vscode.commands.registerCommand("gitBearings.refresh", async () => {
       if (selection.currentState.kind !== "selected") {
         await vscode.window.showInformationMessage("先にGit BearingsのRepositoryを選択してください。");
@@ -143,6 +147,20 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
   );
   await source.initialize();
+}
+
+function parseSelection(value: unknown): import("./domain/appViewState").SelectionState | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const kind = (value as { kind?: unknown }).kind;
+  if (kind === "overview" || kind === "head" || kind === "staging" || kind === "stashShelf") return { kind };
+  if (kind === "branch" && typeof (value as { branchName?: unknown }).branchName === "string") return { kind, branchName: (value as { branchName: string }).branchName };
+  if (kind === "commit" && typeof (value as { commitId?: unknown }).commitId === "string") return { kind, commitId: (value as { commitId: string }).commitId };
+  if (kind === "branchComparison" && typeof (value as { baseRef?: unknown }).baseRef === "string") return { kind, baseRef: (value as { baseRef: string }).baseRef };
+  if (kind === "workingTree" && ["overview", "unstaged", "untracked", "conflicts"].includes((value as { section?: unknown }).section as string)) return { kind, section: (value as { section: "overview" | "unstaged" | "untracked" | "conflicts" }).section };
+  if (kind === "upstream" && typeof (value as { remoteName?: unknown }).remoteName === "string" && typeof (value as { branchName?: unknown }).branchName === "string") return { kind, remoteName: (value as { remoteName: string }).remoteName, branchName: (value as { branchName: string }).branchName };
+  if (kind === "remote" && typeof (value as { remoteName?: unknown }).remoteName === "string") return { kind, remoteName: (value as { remoteName: string }).remoteName };
+  if (kind === "stash" && typeof (value as { stashCommitId?: unknown }).stashCommitId === "string") return { kind, stashCommitId: (value as { stashCommitId: string }).stashCommitId };
+  return undefined;
 }
 
 function createRepositoryStateReader(gitPath: string, logger: { appendLine(value: string): void }): RepositoryStateReader {

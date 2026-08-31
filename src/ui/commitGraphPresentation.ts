@@ -44,8 +44,8 @@ export interface CommitGraphPresentation {
 }
 export interface GraphRefBounds { readonly left: number; readonly top: number; readonly width: number; readonly height: number; }
 export interface GraphRefConnector { readonly fromX: number; readonly fromY: number; readonly toX: number; readonly toY: number; }
-export interface GraphRef { readonly kind: "local" | "remoteTracking"; readonly label: string; readonly targetCommitId: string; readonly x: number; readonly y: number; readonly targetY: number; readonly current: boolean; readonly bounds: GraphRefBounds; readonly connector: GraphRefConnector; }
-export interface GraphHead { readonly targetKind: "branch" | "commit"; readonly targetCommitId: string; readonly x: number; readonly y: number; readonly targetY: number; }
+export interface GraphRef { readonly kind: "local" | "remoteTracking"; readonly label: string; readonly targetCommitId: string; readonly x: number; readonly y: number; readonly targetY: number; readonly current: boolean; readonly bounds: GraphRefBounds; readonly connector: GraphRefConnector; readonly visualState?: "selected" | "related"; readonly revealed?: boolean; }
+export interface GraphHead { readonly targetKind: "branch" | "commit"; readonly targetCommitId: string; readonly x: number; readonly y: number; readonly targetY: number; readonly visualState?: "selected" | "related"; }
 
 const X_STEP = 154;
 const Y_STEP = 56;

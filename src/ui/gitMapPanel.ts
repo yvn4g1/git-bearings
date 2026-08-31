@@ -2,6 +2,9 @@ import * as vscode from "vscode";
 import { renderGitMapHtml } from "./gitMapHtmlRenderer";
 import { createGitMapPresentation } from "./gitMapPresentation";
 import { RepositoryStateSnapshotStore } from "./repositoryStateSnapshot";
+import { AppViewStateStore } from "../domain/appViewStateStore";
+import { parseGitMapSelectionMessage } from "./gitMapMessage";
+import { isSelectionValid, reconcileSelection } from "../domain/selectionReconciliation";
 
 const GIT_MAP_PANEL_VIEW_TYPE = "gitBearings.gitMap";
 
@@ -9,15 +12,20 @@ export class GitMapPanel implements vscode.Disposable {
   private panel: vscode.WebviewPanel | undefined;
   private readonly disposables: vscode.Disposable[] = [];
 
-  constructor(private readonly snapshotStore: RepositoryStateSnapshotStore) {
-    this.disposables.push(snapshotStore.onDidChange(() => this.render()));
+  constructor(private readonly snapshotStore: RepositoryStateSnapshotStore, private readonly viewState: AppViewStateStore<unknown>) {
+    this.disposables.push(snapshotStore.onDidChange((snapshot) => { this.viewState.select(reconcileSelection(this.viewState.current.selection, snapshot)); this.render(); }));
+    this.disposables.push(viewState.onDidChange(() => this.render()));
   }
 
   show(): void {
     if (this.panel) { this.panel.reveal(vscode.ViewColumn.Beside); return; }
-    const panel = vscode.window.createWebviewPanel(GIT_MAP_PANEL_VIEW_TYPE, "Git Bearings: Git Map", vscode.ViewColumn.Beside, { enableScripts: false });
+    const panel = vscode.window.createWebviewPanel(GIT_MAP_PANEL_VIEW_TYPE, "Git Bearings: Git Map", vscode.ViewColumn.Beside, { enableScripts: true });
     this.panel = panel;
     this.render();
+    this.disposables.push(panel.webview.onDidReceiveMessage((message: unknown) => {
+      const selection = parseGitMapSelectionMessage(message);
+      if (selection && isSelectionValid(selection, this.snapshotStore.current)) this.viewState.select(selection);
+    }));
     this.disposables.push(panel.onDidDispose(() => { if (this.panel === panel) this.panel = undefined; }));
   }
 
@@ -27,7 +35,7 @@ export class GitMapPanel implements vscode.Disposable {
   }
 
   private render(): void {
-    if (this.panel) this.panel.webview.html = renderGitMapHtml(createGitMapPresentation(this.snapshotStore.current), createNonce());
+    if (this.panel) this.panel.webview.html = renderGitMapHtml(createGitMapPresentation(this.snapshotStore.current, this.viewState.current.selection), createNonce());
   }
 }
 
