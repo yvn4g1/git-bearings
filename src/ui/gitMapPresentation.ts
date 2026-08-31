@@ -1,4 +1,5 @@
 import type { RepositoryState } from "../domain/repositoryState";
+import { createCommitGraphPresentation, type CommitGraphPresentation } from "./commitGraphPresentation";
 import type { RepositoryStateSnapshot } from "./repositoryStateSnapshot";
 
 export interface GitMapItem { readonly label: string; readonly value: string; }
@@ -11,7 +12,7 @@ export interface GitMapPresentation {
   readonly operationBanner?: string;
   readonly workingTree: readonly GitMapItem[];
   readonly staging: GitMapItem;
-  readonly local: readonly GitMapItem[];
+  readonly graph: CommitGraphPresentation;
   readonly remotes: readonly GitMapRemote[];
   readonly remoteMessage?: string;
   readonly remoteUnavailableReason?: string;
@@ -29,19 +30,12 @@ export function createGitMapPresentation(snapshot: RepositoryStateSnapshot): Git
   return {
     status: "available", repository: state.repository.rootPath, operationBanner: operationBanner(state),
     workingTree: [{ label: "Modified", value: String(modified) }, { label: "Unstaged", value: String(state.workingTree.unstaged.length) }, { label: "Untracked", value: String(state.workingTree.untracked.length) }, { label: "Conflicts", value: String(state.workingTree.conflicts.length) }],
-    staging: { label: "Staged", value: String(state.workingTree.staged.length) }, local: localFacts(state), ...remoteFacts(state), detailSnapshot: snapshot,
+    staging: { label: "Staged", value: String(state.workingTree.staged.length) }, graph: createCommitGraphPresentation(state), ...remoteFacts(state), detailSnapshot: snapshot,
   };
 }
 
 function unavailable(snapshot: Exclude<RepositoryStateSnapshot, { kind: "available" }>, message: string, reason?: string): GitMapPresentation {
-  return { status: snapshot.kind, repository: snapshot.kind === "empty" ? undefined : snapshot.rootPath, message, unavailableReason: reason, workingTree: [], staging: { label: "Staged", value: "" }, local: [], remotes: [], upstream: [], detailSnapshot: snapshot };
-}
-
-function localFacts(state: RepositoryState): readonly GitMapItem[] {
-  const location = state.currentLocation;
-  if (location.kind === "unborn") return [{ label: "現在地", value: location.branchName }, { label: "Commit", value: "まだcommitがありません" }];
-  if (location.kind === "detached") return [{ label: "現在地", value: "detached HEAD" }, { label: "HEAD", value: `${location.head.shortId} ${location.head.subject}` }, { label: "読み取った履歴", value: `${state.history.length} commits` }];
-  return [{ label: "現在地", value: location.branchName }, { label: "HEAD", value: `${location.head.shortId} ${location.head.subject}` }, { label: "読み取った履歴", value: `${state.history.length} commits` }];
+  return { status: snapshot.kind, repository: snapshot.kind === "empty" ? undefined : snapshot.rootPath, message, unavailableReason: reason, workingTree: [], staging: { label: "Staged", value: "" }, graph: { kind: "empty", nodes: [], edges: [], omissions: [], width: 0, height: 0 }, remotes: [], upstream: [], detailSnapshot: snapshot };
 }
 
 function remoteFacts(state: RepositoryState): Pick<GitMapPresentation, "remotes" | "remoteMessage" | "remoteUnavailableReason" | "upstream" | "upstreamUnavailableReason"> {

@@ -18,5 +18,5 @@ test("Git Map renderer escapes repository-derived strings and preserves CSP", ()
 
 function presentation(): GitMapPresentation {
   const snapshot = { kind: "empty" as const };
-  return { status: "available", repository: `<script>`, operationBanner: `<img src=x>`, workingTree: [{ label: "Modified", value: "0" }], staging: { label: "Staged", value: "0" }, local: [{ label: "HEAD", value: `<script>` }], remotes: [{ name: `<img src=x>`, facts: [] }], upstream: [], detailSnapshot: snapshot };
+  return { status: "available", repository: `<script>`, operationBanner: `<img src=x>`, workingTree: [{ label: "Modified", value: "0" }], staging: { label: "Staged", value: "0" }, graph: { kind: "graph", nodes: [{ commitId: "id", shortId: "abc", subject: `<script>`, x: 20, y: 20, roles: [] }], edges: [], omissions: [], width: 200, height: 80 }, remotes: [{ name: `<img src=x>`, facts: [] }], upstream: [], detailSnapshot: snapshot };
 }

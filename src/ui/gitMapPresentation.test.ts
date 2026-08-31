@@ -23,11 +23,11 @@ test("working tree buckets retain their factual counts", () => {
   assert.equal(map.workingTree.some((item) => item.label.includes("files")), false);
 });
 
-test("local repository uses actual current state and creates no unborn commit", () => {
+test("local repository graph uses actual current state and creates no unborn commit", () => {
   const unborn = presentation({ currentLocation: { kind: "unborn", branchName: "main", head: null, detached: false }, history: [] });
-  assert.deepEqual(unborn.local, [{ label: "現在地", value: "main" }, { label: "Commit", value: "まだcommitがありません" }]);
-  assert.equal(unborn.local.some((item) => item.value.includes("aaaaaaa")), false);
-  assert.equal(presentation().local[1].value, "aaaaaaa subject");
+  assert.equal(unborn.graph.kind, "empty");
+  assert.equal(unborn.graph.nodes.some((node) => node.shortId === "aaaaaaa"), false);
+  assert.equal(presentation({ history: [{ commit, parentIds: [] }] }).graph.nodes[0].subject, "subject");
 });
 
 test("remote absence, cached refs, and supplemental failure remain distinct", () => {
@@ -37,7 +37,7 @@ test("remote absence, cached refs, and supplemental failure remain distinct", ()
   const unavailable = presentation({ remotes: { kind: "unavailable", reason: "remote failed" }, comparison: { kind: "unavailable", reason: "comparison failed" }, upstream: { kind: "unavailable", reason: "upstream failed" } });
   assert.equal(unavailable.remoteMessage, "Remote情報を取得できません");
   assert.equal(unavailable.remoteUnavailableReason, "remote failed");
-  assert.equal(unavailable.local[0].value, "feature");
+  assert.equal(unavailable.graph.kind, "empty");
 });
 
 test("upstream relation is sourced from RepositoryState", () => {
