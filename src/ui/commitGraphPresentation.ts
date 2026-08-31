@@ -38,8 +38,8 @@ export interface CommitGraphPresentation {
   readonly remoteTrackingRefs: readonly GraphRef[];
   readonly head?: GraphHead;
 }
-export interface GraphRef { readonly kind: "local" | "remoteTracking"; readonly label: string; readonly targetCommitId: string; readonly x: number; readonly y: number; readonly current: boolean; }
-export interface GraphHead { readonly targetKind: "branch" | "commit"; readonly targetCommitId: string; readonly targetLabel?: string; readonly x: number; readonly y: number; }
+export interface GraphRef { readonly kind: "local" | "remoteTracking"; readonly label: string; readonly targetCommitId: string; readonly x: number; readonly y: number; readonly targetY: number; readonly current: boolean; }
+export interface GraphHead { readonly targetKind: "branch" | "commit"; readonly targetCommitId: string; readonly x: number; readonly y: number; readonly targetY: number; }
 
 const X_STEP = 154;
 const Y_STEP = 56;
@@ -48,7 +48,7 @@ const PADDING_Y = 32;
 
 export function createCommitGraphPresentation(state: RepositoryState): CommitGraphPresentation {
   if (state.history.length === 0) {
-    return empty(state.currentLocation.kind === "unborn" ? "まだ commit がありません" : "表示できる履歴がありません");
+    return empty(state.currentLocation.kind === "unborn" ? "まだ commit がありません" : "表示できる履歴がありません", state.currentLocation.kind === "unborn" ? state.currentLocation.branchName : undefined);
   }
 
   const entries = new Map<string, { readonly index: number; readonly parentIds: readonly string[]; readonly shortId: string; readonly subject: string }>();
@@ -88,9 +88,11 @@ export function createCommitGraphPresentation(state: RepositoryState): CommitGra
     }
     const maxRank = Math.max(...ranks.values());
     const maxLane = Math.max(...lanes.values());
-    const localBranches = state.localBranches.filter((branch) => nodeById.has(branch.tipCommitId)).sort((a, b) => a.name.localeCompare(b.name)).map((branch, index) => ({ kind: "local" as const, label: branch.name, targetCommitId: branch.tipCommitId, x: nodeById.get(branch.tipCommitId)!.x, y: 48 - index * 22, current: state.currentLocation.kind === "branch" && branch.name === state.currentLocation.branchName }));
-    const remoteTrackingRefs = state.remotes.kind !== "available" ? [] : state.remotes.value.flatMap((remote) => remote.trackingRefs.filter((ref) => nodeById.has(ref.commitId)).map((ref, index) => ({ kind: "remoteTracking" as const, label: `${remote.name}/${ref.branchName}`, targetCommitId: ref.commitId, x: nodeById.get(ref.commitId)!.x, y: 48 - index * 22, current: false })));
-    const head = state.currentLocation.kind === "branch" ? localBranches.find((branch) => branch.current) && { targetKind: "branch" as const, targetCommitId: state.currentLocation.head.id, targetLabel: state.currentLocation.branchName, x: nodeById.get(state.currentLocation.head.id)?.x ?? 0, y: 18 } : state.currentLocation.kind === "detached" && nodeById.has(state.currentLocation.head.id) ? { targetKind: "commit" as const, targetCommitId: state.currentLocation.head.id, x: nodeById.get(state.currentLocation.head.id)!.x, y: 30 } : undefined;
+    const grouped = new Map<string, typeof state.localBranches>(); for (const branch of state.localBranches.filter((branch) => nodeById.has(branch.tipCommitId))) grouped.set(branch.tipCommitId, [...(grouped.get(branch.tipCommitId) ?? []), branch]);
+    const localBranches = [...grouped.entries()].flatMap(([targetCommitId, branches]) => [...branches].sort((a, b) => a.name.localeCompare(b.name)).map((branch, index) => ({ kind: "local" as const, label: branch.name, targetCommitId, x: nodeById.get(targetCommitId)!.x, y: 48 + index * 22, targetY: nodeById.get(targetCommitId)!.y, current: state.currentLocation.kind === "branch" && branch.name === state.currentLocation.branchName })));
+    const remoteTrackingRefs = state.remotes.kind !== "available" ? [] : state.remotes.value.flatMap((remote) => remote.trackingRefs.filter((ref) => nodeById.has(ref.commitId)).map((ref, index) => ({ kind: "remoteTracking" as const, label: `${remote.name}/${ref.branchName}`, targetCommitId: ref.commitId, x: nodeById.get(ref.commitId)!.x, y: 48 + index * 22, targetY: nodeById.get(ref.commitId)!.y, current: false })));
+    const currentBranch = localBranches.find((branch) => branch.current);
+    const head = state.currentLocation.kind === "branch" && currentBranch ? { targetKind: "branch" as const, targetCommitId: state.currentLocation.head.id, x: currentBranch.x, y: 18, targetY: currentBranch.y - 12 } : state.currentLocation.kind === "detached" && nodeById.has(state.currentLocation.head.id) ? { targetKind: "commit" as const, targetCommitId: state.currentLocation.head.id, x: nodeById.get(state.currentLocation.head.id)!.x, y: 30, targetY: nodeById.get(state.currentLocation.head.id)!.y - 8 } : undefined;
     return { kind: "graph", nodes, edges, omissions, localBranches, remoteTrackingRefs, head, width: PADDING_X * 2 + (maxRank + 1) * X_STEP + 180, height: PADDING_Y * 2 + (maxLane + 1) * Y_STEP + 96 };
   } catch {
     return unavailable();
@@ -142,5 +144,5 @@ function resolveBaseTip(state: RepositoryState): string | undefined {
   return ids.length === 1 ? ids[0] : undefined;
 }
 
-function empty(message: string): CommitGraphPresentation { return { kind: "empty", nodes: [], edges: [], omissions: [], localBranches: [], remoteTrackingRefs: [], width: 0, height: 0, message }; }
+function empty(message: string, unbornBranch?: string): CommitGraphPresentation { return { kind: "empty", nodes: [], edges: [], omissions: [], localBranches: unbornBranch ? [{ kind: "local", label: unbornBranch, targetCommitId: "", x: 0, y: 0, targetY: 0, current: true }] : [], remoteTrackingRefs: [], head: unbornBranch ? { targetKind: "branch", targetCommitId: "", x: 0, y: 0, targetY: 0 } : undefined, width: 0, height: 0, message }; }
 function unavailable(): CommitGraphPresentation { return { kind: "unavailable", nodes: [], edges: [], omissions: [], localBranches: [], remoteTrackingRefs: [], width: 0, height: 0, message: "履歴の関係を安全に表示できません" }; }
