@@ -4,9 +4,9 @@ import { createCommitGraphPresentation, type CommitGraphPresentation } from "./c
 import type { RepositoryStateSnapshot } from "./repositoryStateSnapshot";
 
 export interface GitMapItem { readonly label: string; readonly value: string; }
-export interface WorkingTreePresentation { readonly kind: "clean" | "changes"; readonly unstagedCount: number; readonly modifiedCount: number; readonly untrackedCount: number; readonly conflictsCount: number; }
-export interface StagingPresentation { readonly stagedCount: number; }
-export type StashPresentation = { readonly kind: "none" } | { readonly kind: "shelf"; readonly count: number } | { readonly kind: "unavailable"; readonly reason: string; };
+export interface WorkingTreePresentation { readonly kind: "clean" | "changes"; readonly unstagedCount: number; readonly modifiedCount: number; readonly untrackedCount: number; readonly conflictsCount: number; readonly visualState?: "selected" | "related"; }
+export interface StagingPresentation { readonly stagedCount: number; readonly visualState?: "selected" | "related"; }
+export type StashPresentation = { readonly kind: "none" } | { readonly kind: "shelf"; readonly count: number; readonly visualState?: "selected" | "related" } | { readonly kind: "unavailable"; readonly reason: string; };
 export interface GitMapUnknown { readonly label: string; readonly message: string; }
 export interface GitMapRemote { readonly name: string; readonly facts: readonly GitMapItem[]; readonly liveRemote: GitMapUnknown; }
 export interface GitMapPresentation {
@@ -27,6 +27,7 @@ export interface GitMapPresentation {
   readonly detailSnapshot: RepositoryStateSnapshot;
   readonly selection?: SelectionState;
   readonly detailIdentity?: string;
+  readonly upstreamVisualState?: "selected" | "related";
 }
 
 export function createGitMapPresentation(snapshot: RepositoryStateSnapshot, selection: SelectionState = { kind: "overview" }): GitMapPresentation {
@@ -37,8 +38,8 @@ export function createGitMapPresentation(snapshot: RepositoryStateSnapshot, sele
   const workingTree = state.workingTree;
   return {
     status: "available", repository: state.repository.rootPath, operationBanner: operationBanner(state),
-    workingTree: { kind: workingTree.unstaged.length || workingTree.untracked.length || workingTree.conflicts.length ? "changes" : "clean", unstagedCount: workingTree.unstaged.length, modifiedCount: workingTree.unstaged.filter((change) => change.kind === "modified").length, untrackedCount: workingTree.untracked.length, conflictsCount: workingTree.conflicts.length },
-    staging: { stagedCount: workingTree.staged.length }, stash: stashPresentation(state), graph: selectedGraph(createCommitGraphPresentation(state), state, selection), ...remoteFacts(state), detailSnapshot: snapshot, selection, detailIdentity: selectionIdentity(selection),
+    workingTree: { kind: workingTree.unstaged.length || workingTree.untracked.length || workingTree.conflicts.length ? "changes" : "clean", unstagedCount: workingTree.unstaged.length, modifiedCount: workingTree.unstaged.filter((change) => change.kind === "modified").length, untrackedCount: workingTree.untracked.length, conflictsCount: workingTree.conflicts.length, ...(selection.kind === "workingTree" ? { visualState: "selected" as const } : {}) },
+    staging: { stagedCount: workingTree.staged.length, ...(selection.kind === "staging" ? { visualState: "selected" as const } : {}) }, stash: selectedStash(stashPresentation(state), selection), graph: selectedGraph(createCommitGraphPresentation(state), state, selection), ...remoteFacts(state), detailSnapshot: snapshot, selection, detailIdentity: selectionIdentity(selection), ...(selection.kind === "upstream" ? { upstreamVisualState: "selected" as const } : {}),
   };
 }
 
@@ -55,10 +56,12 @@ function selectedGraph(graph: CommitGraphPresentation, state: RepositoryState, s
   return { ...graph,
     nodes: graph.nodes.map((node) => ({ ...node, visualState: node.commitId === primaryCommit ? "selected" : node.commitId === branch?.tipCommitId || (headSelected && node.commitId === headId) ? "related" : undefined })),
     localBranches: graph.localBranches.map((ref) => ({ ...ref, visualState: selection.kind === "branch" && ref.label === selection.branchName ? "selected" : ref.targetCommitId === primaryCommit || (headSelected && ref.current) ? "related" : undefined })),
-    remoteTrackingRefs: graph.remoteTrackingRefs.map((ref) => ({ ...ref, revealed: revealTracking && ref.label === `${selection.remoteName}/${selection.branchName}` })),
+    remoteTrackingRefs: graph.remoteTrackingRefs.map((ref) => ({ ...ref, revealed: revealTracking && ref.remoteName === selection.remoteName && ref.branchName === selection.branchName && ref.trackingRef === state.upstream.value.trackingRef, visualState: revealTracking && ref.remoteName === selection.remoteName && ref.branchName === selection.branchName && ref.trackingRef === state.upstream.value.trackingRef ? "related" : undefined })),
     head: graph.head ? { ...graph.head, visualState: headSelected ? "selected" : selection.kind === "branch" && state.currentLocation.kind === "branch" && selection.branchName === state.currentLocation.branchName ? "related" : primaryCommit === headId ? "related" : undefined } : undefined,
   };
 }
+
+function selectedStash(stash: StashPresentation, selection: SelectionState): StashPresentation { return stash.kind === "shelf" && (selection.kind === "stashShelf" || selection.kind === "stash") ? { ...stash, visualState: selection.kind === "stashShelf" ? "selected" : "related" } : stash; }
 
 function selectionIdentity(selection: SelectionState): string {
   switch (selection.kind) { case "branch": return `branch ${selection.branchName}`; case "commit": return `commit ${selection.commitId.slice(0, 7)}`; case "workingTree": return selection.section === "overview" ? "Working Tree" : `Working Tree / ${selection.section}`; case "upstream": return `upstream ${selection.remoteName}/${selection.branchName}`; case "remote": return `Remote ${selection.remoteName}`; case "stash": return `stash ${selection.stashCommitId.slice(0, 7)}`; case "branchComparison": return `comparison ${selection.baseRef}`; case "unpushedCommits": return "local-only commits"; case "stashShelf": return "Stash Shelf"; case "head": return "HEAD"; case "staging": return "Staging"; case "overview": return "Overview"; }

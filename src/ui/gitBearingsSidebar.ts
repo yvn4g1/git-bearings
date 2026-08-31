@@ -13,7 +13,11 @@ export function createGitBearingsSidebar(snapshotStore: RepositoryStateSnapshotS
     const item = provider.itemForSelection(state.selection);
     if (item) void treeView.reveal(item, { select: true, focus: false, expand: true });
   });
-  return vscode.Disposable.from(treeView, provider, selectionSubscription);
+  const treeSelectionSubscription = treeView.onDidChangeSelection((event) => {
+    const selection = event.selection[0]?.node.selection;
+    if (selection) viewState.select(selection);
+  });
+  return vscode.Disposable.from(treeView, provider, selectionSubscription, treeSelectionSubscription);
 }
 
 class GitBearingsSidebarProvider implements vscode.TreeDataProvider<SidebarItem>, vscode.Disposable {
@@ -22,7 +26,7 @@ class GitBearingsSidebarProvider implements vscode.TreeDataProvider<SidebarItem>
 
   readonly onDidChangeTreeData = this.changed.event;
 
-  constructor(private readonly snapshotStore: RepositoryStateSnapshotStore, private readonly viewState: AppViewStateStore<unknown>) {
+  constructor(private readonly snapshotStore: RepositoryStateSnapshotStore, _viewState: AppViewStateStore<unknown>) {
     this.snapshotSubscription = snapshotStore.onDidChange(() => this.changed.fire(undefined));
   }
 
@@ -58,8 +62,7 @@ class SidebarItem extends vscode.TreeItem {
     this.id = node.id;
     this.description = node.description;
     this.tooltip = node.tooltip ?? [node.label, node.description].filter(Boolean).join("\n");
-    if (node.selection) this.command = { command: "gitBearings.selectSelection", title: "Git Bearings: 選択", arguments: [node.selection] };
-    else if (node.command) this.command = node.command;
+    if (node.command) this.command = node.command;
   }
 }
 

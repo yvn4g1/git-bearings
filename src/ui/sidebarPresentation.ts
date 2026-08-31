@@ -91,7 +91,7 @@ function comparisonNode(state: RepositoryState): SidebarNode {
       leaf("comparison:behind", `${base}側のみ ${value.behind} commits`),
     ];
   return group("comparison", "基準branchとの関係", "Comparison", [
-    group("comparison:relation", `${base}との関係`, undefined, children),
+    { ...group("comparison:relation", `${base}との関係`, undefined, children), selection: { kind: "branchComparison", baseRef: value.baseRef } },
   ]);
 }
 
@@ -113,19 +113,21 @@ function upstreamNode(state: RepositoryState): SidebarNode {
   if (value.remoteName === ".") {
     return group("upstream", "追跡関係", "Upstream / Remote", [
       selectable("upstream:local", `ローカルupstream: ${value.branchName}`, { kind: "upstream", remoteName: value.remoteName, branchName: value.branchName }),
-      relationNode(value.relation),
+      relationNode(value.relation, value.trackingRef),
     ]);
   }
+  const origin = state.remotes.kind === "available" ? state.remotes.value.find((remote) => remote.name === "origin") : undefined;
   return group("upstream", "追跡関係", "Upstream / Remote", [
+    ...(origin ? [selectable("remote:origin", "Remote origin", { kind: "remote", remoteName: origin.name }, "最後に取得したRemote情報")] : []),
     selectable("upstream:remote", `upstream: ${value.remoteName}/${value.branchName}`, { kind: "upstream", remoteName: value.remoteName, branchName: value.branchName }, "最後に取得したRemote情報", "これはlive Remote状態ではなく、ローカルGitが最後に取得したRemote情報です。"),
-    relationNode(value.relation),
+    relationNode(value.relation, value.trackingRef),
   ]);
 }
 
-function relationNode(relation: AvailabilityResult<AheadBehind>): SidebarNode {
+function relationNode(relation: AvailabilityResult<AheadBehind>, upstreamRef?: string): SidebarNode {
   if (relation.kind === "unavailable") return leaf("upstream:relation-unavailable", "差分を取得できません", undefined, relation.reason);
   return group("upstream:relation", "差分", undefined, [
-    leaf("upstream:ahead", `あなた側のみ ${relation.value.ahead} commits`),
+    relation.value.ahead > 0 && upstreamRef ? selectable("upstream:ahead", `あなた側のみ ${relation.value.ahead} commits`, { kind: "unpushedCommits", upstreamRef }) : leaf("upstream:ahead", `あなた側のみ ${relation.value.ahead} commits`),
     leaf("upstream:behind", `upstream側のみ ${relation.value.behind} commits`),
   ]);
 }
