@@ -107,18 +107,20 @@ function workingTreeNode(state: RepositoryState): SidebarNode {
 
 function upstreamNode(state: RepositoryState): SidebarNode {
   const upstream = state.upstream;
-  if (upstream.kind === "notConfigured") return group("upstream", "追跡関係", "Upstream / Remote", [leaf("upstream:not-configured", "upstreamは設定されていません")]);
-  if (upstream.kind === "unavailable") return group("upstream", "追跡関係", "Upstream / Remote", [leaf("upstream:unavailable", "upstream情報を取得できません", undefined, upstream.reason)]);
+  const origin = state.remotes.kind === "available" ? state.remotes.value.find((remote) => remote.name === "origin") : undefined;
+  const remote = origin ? [selectable("remote:origin", "Remote origin", { kind: "remote", remoteName: origin.name }, "最後に取得したRemote情報")] : [];
+  if (upstream.kind === "notConfigured") return group("upstream", "追跡関係", "Upstream / Remote", [...remote, leaf("upstream:not-configured", "upstreamは設定されていません")]);
+  if (upstream.kind === "unavailable") return group("upstream", "追跡関係", "Upstream / Remote", [...remote, leaf("upstream:unavailable", "upstream情報を取得できません", undefined, upstream.reason)]);
   const value = upstream.value;
   if (value.remoteName === ".") {
     return group("upstream", "追跡関係", "Upstream / Remote", [
+      ...remote,
       selectable("upstream:local", `ローカルupstream: ${value.branchName}`, { kind: "upstream", remoteName: value.remoteName, branchName: value.branchName }),
       relationNode(value.relation, value.trackingRef),
     ]);
   }
-  const origin = state.remotes.kind === "available" ? state.remotes.value.find((remote) => remote.name === "origin") : undefined;
   return group("upstream", "追跡関係", "Upstream / Remote", [
-    ...(origin ? [selectable("remote:origin", "Remote origin", { kind: "remote", remoteName: origin.name }, "最後に取得したRemote情報")] : []),
+    ...remote,
     selectable("upstream:remote", `upstream: ${value.remoteName}/${value.branchName}`, { kind: "upstream", remoteName: value.remoteName, branchName: value.branchName }, "最後に取得したRemote情報", "これはlive Remote状態ではなく、ローカルGitが最後に取得したRemote情報です。"),
     relationNode(value.relation, value.trackingRef),
   ]);

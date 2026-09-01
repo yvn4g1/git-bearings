@@ -131,6 +131,15 @@ test("remote upstream relation unavailable retains the remote target and last-fe
   assert.equal(nodes.find((node) => node.id === "upstream")?.children?.[0].tooltip, "これはlive Remote状態ではなく、ローカルGitが最後に取得したRemote情報です。");
 });
 
+test("origin selection is available independently of upstream configuration", () => {
+  const origin = { name: "origin", trackingRefs: [], locallyKnownDefaultBranch: null };
+  for (const upstream of [{ kind: "notConfigured" as const }, { kind: "unavailable" as const, reason: "failed" }, { kind: "available" as const, value: { remoteName: ".", branchName: "main", trackingRef: "refs/heads/main", relation: { kind: "available" as const, value: { ahead: 0, behind: 0 } } } }]) {
+    const node = presentation({ remotes: { kind: "available", value: [origin] }, upstream }).find((item) => item.id === "upstream");
+    assert.deepEqual(node?.children?.find((item) => item.id === "remote:origin")?.selection, { kind: "remote", remoteName: "origin" });
+  }
+  assert.equal(presentation({ remotes: { kind: "available", value: [] } }).find((item) => item.id === "upstream")?.children?.some((item) => item.id === "remote:origin"), false);
+});
+
 test("multiple supplemental unavailable sections preserve core presentation", () => {
   const all = labels(presentation({
     comparison: { kind: "unavailable", reason: "comparison failed" },

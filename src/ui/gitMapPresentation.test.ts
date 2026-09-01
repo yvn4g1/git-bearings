@@ -60,6 +60,17 @@ test("base configuration is left to the detail layer without guessing", () => {
   assert.equal((map.detailSnapshot as { state: RepositoryState }).state.comparison.kind, "notConfigured");
 });
 
+test("selection visual state keeps semantic targets in presentation", () => {
+  const state = { remotes: { kind: "available" as const, value: [{ name: "origin", trackingRefs: [{ branchName: "feature", trackingRef: "refs/remotes/origin/feature", commitId: oid }], locallyKnownDefaultBranch: null }] }, upstream: { kind: "available" as const, value: { remoteName: "origin", branchName: "feature", trackingRef: "refs/remotes/origin/feature", relation: { kind: "available" as const, value: { ahead: 1, behind: 0 } } } }, history: [{ commit, parentIds: [] }] };
+  const branch = createGitMapPresentation({ kind: "available", repositoryId: "repo", state: { ...baseState(), ...state } }, { kind: "branch", branchName: "feature" });
+  assert.equal(branch.graph.localBranches[0].visualState, "selected"); assert.equal(branch.graph.nodes[0].visualState, "related"); assert.equal(branch.graph.head?.visualState, "related");
+  const upstream = createGitMapPresentation({ kind: "available", repositoryId: "repo", state: { ...baseState(), ...state } }, { kind: "upstream", remoteName: "origin", branchName: "feature" });
+  assert.equal(upstream.upstreamVisualState, "selected"); assert.equal(upstream.graph.remoteTrackingRefs[0].revealed, true); assert.equal(upstream.graph.remoteTrackingRefs[0].visualState, "related");
+  assert.equal(createGitMapPresentation({ kind: "available", repositoryId: "repo", state: { ...baseState(), ...state } }, { kind: "remote", remoteName: "origin" }).remotes[0].visualState, "selected");
+  assert.equal(createGitMapPresentation({ kind: "available", repositoryId: "repo", state: baseState() }, { kind: "workingTree", section: "overview" }).workingTree.visualState, "selected");
+  assert.equal(createGitMapPresentation({ kind: "available", repositoryId: "repo", state: { ...baseState(), stash: { kind: "available", value: [{ index: 0, commitId: oid, message: "WIP" }] } } }, { kind: "stash", stashCommitId: oid }).stash.kind, "shelf");
+});
+
 test("clean, same-path staging, stash, and remote states remain semantically separate", () => {
   const clean = presentation();
   assert.deepEqual(clean.workingTree, { kind: "clean", unstagedCount: 0, modifiedCount: 0, untrackedCount: 0, conflictsCount: 0 });

@@ -37,6 +37,8 @@ export interface CommitGraphPresentation {
   readonly height: number;
   readonly message?: string;
   readonly unbornBranch?: string;
+  readonly unbornHeadVisualState?: "selected" | "related";
+  readonly unbornBranchVisualState?: "selected" | "related";
   readonly localBranches: readonly GraphRef[];
   readonly remoteTrackingRefs: readonly GraphRef[];
   readonly head?: GraphHead;

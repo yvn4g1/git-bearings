@@ -20,6 +20,11 @@ test("Git Map renderer escapes repository-derived strings and preserves CSP", ()
   assert.ok(!html.includes(">CURRENT<"));
   assert.ok(!html.includes("BRANCH POINT"));
   assert.ok(!html.includes("BRANCH CREATED HERE"));
+  assert.ok(html.includes("script-src 'nonce-nonce-value'"));
+  assert.ok(!html.includes("unsafe-inline")); assert.ok(!html.includes("unsafe-eval"));
+  for (const selection of ['&quot;workingTree&quot;,&quot;section&quot;:&quot;overview&quot;', '&quot;staging&quot;', '&quot;stashShelf&quot;', '&quot;remote&quot;']) assert.ok(html.includes(selection));
+  assert.ok(html.includes('role="button"')); assert.ok(html.includes('tabindex="0"'));
+  assert.ok(html.includes("選択中: Overview"));
 });
 
 test("renderer emits hidden ref grammar and unborn state without injection", () => {
@@ -30,7 +35,15 @@ test("renderer emits hidden ref grammar and unborn state without injection", () 
   assert.ok(html.includes('d="M 20 58 L 20 72"'));
   assert.ok(html.includes("&lt;script&gt;")); assert.ok(html.includes("&lt;img src=x&gt;")); assert.ok(!html.includes("<script>"));
   const unborn = { ...normal, graph: { kind: "unborn" as const, nodes: [], edges: [], omissions: [], localBranches: [], remoteTrackingRefs: [], unbornBranch: "main", width: 0, height: 0, message: "まだ commit がありません" } };
-  const unbornHtml = renderGitMapHtml(unborn, "nonce"); assert.ok(unbornHtml.includes("[ main ]")); assert.ok(!unbornHtml.includes('class="graph-node"'));
+  const unbornHtml = renderGitMapHtml(unborn, "nonce"); assert.ok(unbornHtml.includes("[ main ]")); assert.ok(!unbornHtml.includes('class="graph-node"')); assert.ok(unbornHtml.includes('&quot;kind&quot;:&quot;head&quot;')); assert.ok(unbornHtml.includes('&quot;branchName&quot;:&quot;main&quot;'));
+});
+
+test("renderer applies presentation selection state to actual elements", () => {
+  const html = renderGitMapHtml({ ...presentation(), detailIdentity: "Remote & <origin>", workingTree: { ...presentation().workingTree, visualState: "selected" }, staging: { stagedCount: 1, visualState: "related" }, stash: { kind: "shelf", count: 1, visualState: "selected" }, upstreamSelection: { remoteName: "origin", branchName: "main" }, upstreamVisualState: "selected", remotes: [{ ...presentation().remotes[0], visualState: "selected" }], graph: { ...presentation().graph, remoteTrackingRefs: [{ kind: "remoteTracking", label: "origin/main", targetCommitId: "id", x: 20, y: 110, targetY: 80, current: false, bounds: { left: -32, top: 100, width: 104, height: 20 }, connector: { fromX: 20, fromY: 120, toX: 20, toY: 72 }, revealed: true, visualState: "related" }] } }, "nonce");
+  assert.ok(html.includes('region fact-state selected-state')); assert.ok(html.includes('staging fact-state related-state'));
+  assert.ok(html.includes('stash-shelf fact-state selected-state')); assert.ok(html.includes('remote-tracking-ref related-state'));
+  assert.ok(html.includes('&quot;kind&quot;:&quot;upstream&quot;')); assert.ok(html.includes('data-primary-selection="true"'));
+  assert.ok(html.includes("選択中: Remote &amp; &lt;origin&gt;"));
 });
 
 test("Remote unavailable uses Unknown grammar while missing Remote remains a fact", () => {

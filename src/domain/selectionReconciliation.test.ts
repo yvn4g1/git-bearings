@@ -8,4 +8,7 @@ test("refresh falls back when selected facts disappear", () => {
   const snapshot = { kind: "available" as const, repositoryId: "repo", state };
   assert.deepEqual(reconcileSelection({ kind: "commit", commitId: "missing" }, snapshot), { kind: "overview" });
   assert.deepEqual(reconcileSelection({ kind: "branch", branchName: "main" }, snapshot), { kind: "branch", branchName: "main" });
+  const tracked = { ...state, remotes: { kind: "available" as const, value: [{ name: "origin", trackingRefs: [], locallyKnownDefaultBranch: null }] }, upstream: { kind: "available" as const, value: { remoteName: "origin", branchName: "main", trackingRef: "refs/remotes/origin/main", relation: { kind: "available" as const, value: { ahead: 1, behind: 0 } } } } };
+  assert.deepEqual(reconcileSelection({ kind: "unpushedCommits", upstreamRef: "refs/remotes/origin/main" }, { ...snapshot, state: tracked }), { kind: "unpushedCommits", upstreamRef: "refs/remotes/origin/main" });
+  for (const relation of [{ kind: "available" as const, value: { ahead: 0, behind: 0 } }, { kind: "unavailable" as const, reason: "failed" }]) assert.deepEqual(reconcileSelection({ kind: "unpushedCommits", upstreamRef: "refs/remotes/origin/main" }, { ...snapshot, state: { ...tracked, upstream: { kind: "available", value: { ...tracked.upstream.value, relation } } } }), { kind: "overview" });
 });

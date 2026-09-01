@@ -15,7 +15,7 @@ export function reconcileSelection(selection: SelectionState, snapshot: Reposito
     case "workingTree": return selection;
     case "staging": return selection;
     case "upstream": return state.upstream.kind === "available" && state.upstream.value.remoteName === selection.remoteName && state.upstream.value.branchName === selection.branchName ? selection : { kind: "overview" };
-    case "unpushedCommits": return state.upstream.kind === "available" && state.upstream.value.trackingRef === selection.upstreamRef ? selection : { kind: "overview" };
+    case "unpushedCommits": return state.upstream.kind === "available" && state.upstream.value.trackingRef === selection.upstreamRef && state.upstream.value.relation.kind === "available" && state.upstream.value.relation.value.ahead > 0 ? selection : { kind: "overview" };
     case "remote": return state.remotes.kind === "available" && state.remotes.value.some((remote) => remote.name === selection.remoteName) ? selection : { kind: "overview" };
     case "stashShelf": return state.stash.kind === "available" && state.stash.value.length > 0 ? selection : { kind: "overview" };
     case "stash": return state.stash.kind === "available" && state.stash.value.some((stash) => stash.commitId === selection.stashCommitId) ? selection : { kind: "overview" };

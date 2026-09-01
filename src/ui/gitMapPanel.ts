@@ -19,7 +19,7 @@ export class GitMapPanel implements vscode.Disposable {
 
   show(): void {
     if (this.panel) { this.panel.reveal(vscode.ViewColumn.Beside); return; }
-    const panel = vscode.window.createWebviewPanel(GIT_MAP_PANEL_VIEW_TYPE, "Git Bearings: Git Map", vscode.ViewColumn.Beside, { enableScripts: true });
+    const panel = vscode.window.createWebviewPanel(GIT_MAP_PANEL_VIEW_TYPE, "Git Bearings: Git Map", vscode.ViewColumn.Beside, { enableScripts: true, retainContextWhenHidden: true });
     this.panel = panel;
     this.render();
     this.disposables.push(panel.webview.onDidReceiveMessage((message: unknown) => {

@@ -8,7 +8,7 @@ export interface WorkingTreePresentation { readonly kind: "clean" | "changes"; r
 export interface StagingPresentation { readonly stagedCount: number; readonly visualState?: "selected" | "related"; }
 export type StashPresentation = { readonly kind: "none" } | { readonly kind: "shelf"; readonly count: number; readonly visualState?: "selected" | "related" } | { readonly kind: "unavailable"; readonly reason: string; };
 export interface GitMapUnknown { readonly label: string; readonly message: string; }
-export interface GitMapRemote { readonly name: string; readonly facts: readonly GitMapItem[]; readonly liveRemote: GitMapUnknown; }
+export interface GitMapRemote { readonly name: string; readonly facts: readonly GitMapItem[]; readonly liveRemote: GitMapUnknown; readonly visualState?: "selected" | "related"; }
 export interface GitMapPresentation {
   readonly status: "empty" | "loading" | "unavailable" | "available";
   readonly repository?: string;
@@ -24,6 +24,7 @@ export interface GitMapPresentation {
   readonly remoteUnavailableReason?: string;
   readonly upstream: readonly GitMapItem[];
   readonly upstreamUnavailableReason?: string;
+  readonly upstreamSelection?: { readonly remoteName: string; readonly branchName: string; };
   readonly detailSnapshot: RepositoryStateSnapshot;
   readonly selection?: SelectionState;
   readonly detailIdentity?: string;
@@ -39,7 +40,7 @@ export function createGitMapPresentation(snapshot: RepositoryStateSnapshot, sele
   return {
     status: "available", repository: state.repository.rootPath, operationBanner: operationBanner(state),
     workingTree: { kind: workingTree.unstaged.length || workingTree.untracked.length || workingTree.conflicts.length ? "changes" : "clean", unstagedCount: workingTree.unstaged.length, modifiedCount: workingTree.unstaged.filter((change) => change.kind === "modified").length, untrackedCount: workingTree.untracked.length, conflictsCount: workingTree.conflicts.length, ...(selection.kind === "workingTree" ? { visualState: "selected" as const } : {}) },
-    staging: { stagedCount: workingTree.staged.length, ...(selection.kind === "staging" ? { visualState: "selected" as const } : {}) }, stash: selectedStash(stashPresentation(state), selection), graph: selectedGraph(createCommitGraphPresentation(state), state, selection), ...remoteFacts(state), detailSnapshot: snapshot, selection, detailIdentity: selectionIdentity(selection), ...(selection.kind === "upstream" ? { upstreamVisualState: "selected" as const } : {}),
+    staging: { stagedCount: workingTree.staged.length, ...(selection.kind === "staging" ? { visualState: "selected" as const } : {}) }, stash: selectedStash(stashPresentation(state), selection), graph: selectedGraph(createCommitGraphPresentation(state), state, selection), ...remoteFacts(state, selection), detailSnapshot: snapshot, selection, detailIdentity: selectionIdentity(selection), ...(selection.kind === "upstream" ? { upstreamVisualState: "selected" as const } : {}),
   };
 }
 
@@ -54,6 +55,7 @@ function selectedGraph(graph: CommitGraphPresentation, state: RepositoryState, s
   const headSelected = selection.kind === "head";
   const revealTracking = selection.kind === "upstream" && selection.remoteName !== "." && state.upstream.kind === "available" && state.upstream.value.remoteName === selection.remoteName && state.upstream.value.branchName === selection.branchName;
   return { ...graph,
+    ...(graph.kind === "unborn" ? { unbornHeadVisualState: selection.kind === "head" ? "selected" as const : selection.kind === "branch" && selection.branchName === graph.unbornBranch ? "related" as const : undefined, unbornBranchVisualState: selection.kind === "branch" && selection.branchName === graph.unbornBranch ? "selected" as const : selection.kind === "head" ? "related" as const : undefined } : {}),
     nodes: graph.nodes.map((node) => ({ ...node, visualState: node.commitId === primaryCommit ? "selected" : node.commitId === branch?.tipCommitId || (headSelected && node.commitId === headId) ? "related" : undefined })),
     localBranches: graph.localBranches.map((ref) => ({ ...ref, visualState: selection.kind === "branch" && ref.label === selection.branchName ? "selected" : ref.targetCommitId === primaryCommit || (headSelected && ref.current) ? "related" : undefined })),
     remoteTrackingRefs: graph.remoteTrackingRefs.map((ref) => ({ ...ref, revealed: revealTracking && ref.remoteName === selection.remoteName && ref.branchName === selection.branchName && ref.trackingRef === state.upstream.value.trackingRef, visualState: revealTracking && ref.remoteName === selection.remoteName && ref.branchName === selection.branchName && ref.trackingRef === state.upstream.value.trackingRef ? "related" : undefined })),
@@ -72,22 +74,22 @@ function stashPresentation(state: RepositoryState): StashPresentation {
   return state.stash.value.length ? { kind: "shelf", count: state.stash.value.length } : { kind: "none" };
 }
 
-function remoteFacts(state: RepositoryState): Pick<GitMapPresentation, "remotes" | "remoteMessage" | "remoteUnavailableReason" | "upstream" | "upstreamUnavailableReason"> {
+function remoteFacts(state: RepositoryState, selection: SelectionState): Pick<GitMapPresentation, "remotes" | "remoteMessage" | "remoteUnavailableReason" | "upstream" | "upstreamUnavailableReason" | "upstreamSelection"> {
   const upstream = upstreamFacts(state);
   if (state.remotes.kind === "unavailable") return { remotes: [], remoteMessage: "Remote情報を取得できません", remoteUnavailableReason: state.remotes.reason, ...upstream };
   if (state.remotes.kind === "notConfigured" || state.remotes.value.length === 0) return { remotes: [], remoteMessage: "Remote は設定されていません", ...upstream };
   const origin = state.remotes.value.find((remote) => remote.name === "origin");
-  return origin ? { remotes: [{ name: origin.name, facts: [{ label: "ローカルにある追跡ref", value: String(origin.trackingRefs.length) }, ...(origin.locallyKnownDefaultBranch ? [{ label: "ローカルで分かるdefault", value: `${origin.name}/${origin.locallyKnownDefaultBranch.branchName}` }] : [])], liveRemote: { label: "live Remote", message: "未確認（自動fetchしません）" } }], ...upstream } : { remotes: [], remoteMessage: "origin は設定されていません", ...upstream };
+  return origin ? { remotes: [{ name: origin.name, facts: [{ label: "ローカルにある追跡ref", value: String(origin.trackingRefs.length) }, ...(origin.locallyKnownDefaultBranch ? [{ label: "ローカルで分かるdefault", value: `${origin.name}/${origin.locallyKnownDefaultBranch.branchName}` }] : [])], liveRemote: { label: "live Remote", message: "未確認（自動fetchしません）" }, ...(selection.kind === "remote" && selection.remoteName === origin.name ? { visualState: "selected" as const } : {}) }], ...upstream } : { remotes: [], remoteMessage: "origin は設定されていません", ...upstream };
 }
 
-function upstreamFacts(state: RepositoryState): Pick<GitMapPresentation, "upstream" | "upstreamUnavailableReason"> {
+function upstreamFacts(state: RepositoryState): Pick<GitMapPresentation, "upstream" | "upstreamUnavailableReason" | "upstreamSelection"> {
   if (state.upstream.kind === "notConfigured") return { upstream: [{ label: "upstream", value: "設定されていません" }] };
   if (state.upstream.kind === "unavailable") return { upstream: [{ label: "upstream", value: "情報を取得できません" }], upstreamUnavailableReason: state.upstream.reason };
   const value = state.upstream.value;
   const target = value.remoteName === "." ? `ローカルupstream: ${value.branchName}` : `upstream: ${value.remoteName}/${value.branchName}`;
-  if (value.relation.kind === "unavailable") return { upstream: [{ label: "追跡", value: target }, { label: "差分", value: "取得できません" }], upstreamUnavailableReason: value.relation.reason };
+  if (value.relation.kind === "unavailable") return { upstream: [{ label: "追跡", value: target }, { label: "差分", value: "取得できません" }], upstreamUnavailableReason: value.relation.reason, upstreamSelection: { remoteName: value.remoteName, branchName: value.branchName } };
   const relation = value.relation.value;
-  return { upstream: [{ label: "追跡", value: target }, { label: "あなた側のみ", value: String(relation.ahead) }, { label: "upstream側のみ", value: String(relation.behind) }] };
+  return { upstream: [{ label: "追跡", value: target }, { label: "あなた側のみ", value: String(relation.ahead) }, { label: "upstream側のみ", value: String(relation.behind) }], upstreamSelection: { remoteName: value.remoteName, branchName: value.branchName } };
 }
 
 function operationBanner(state: RepositoryState): string | undefined {
