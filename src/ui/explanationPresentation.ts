@@ -33,10 +33,13 @@ function head(state: RepositoryState): ExplanationPresentation {
 }
 
 function branch(state: RepositoryState, branchName: string): ExplanationPresentation {
+  if (state.currentLocation.kind === "unborn" && state.currentLocation.branchName === branchName) {
+    return explanation(`branch ${branchName}`, `${branchName} は現在のbranchで、まだ最初のcommitがありません。`, "branchは履歴線そのものではなく、特定commitを指す可動のpointer（ref）です。commitが増えると、そのbranchが指す先が進みます。");
+  }
   const branch = state.localBranches.find((item) => item.name === branchName);
   const current = state.currentLocation.kind === "branch" && state.currentLocation.branchName === branchName;
   const tip = branch ? state.history.find((entry) => entry.commit.id === branch.tipCommitId)?.commit : undefined;
-  const fact = branch ? `${branchName} branch${current ? "は現在のbranchで、" : "は"}先端は${tip ? `commit ${commitLabel(tip)}` : "現在取得済みの履歴では詳細を表示できないcommit"}です。` : `${branchName} branchの現在の先端は確認できません。`;
+  const fact = branch ? `${branchName} branch${current ? "は現在のbranchで、" : "は"}先端は${tip ? `commit ${commitLabel(tip)}` : `commit ${shortId(branch.tipCommitId)}です。詳細は現在取得済みの履歴範囲では表示できません。`}` : `${branchName} branchの現在の先端は確認できません。`;
   return explanation(`branch ${branchName}`, fact, "branchは履歴線そのものではなく、特定commitを指す可動のpointer（ref）です。commitが増えると、そのbranchが指す先が進みます。");
 }
 
@@ -50,7 +53,7 @@ function workingTree(state: RepositoryState, section: "overview" | "unstaged" | 
   const tree = state.workingTree;
   const count = section === "unstaged" ? tree.unstaged.length : section === "untracked" ? tree.untracked.length : section === "conflicts" ? tree.conflicts.length : undefined;
   const label = section === "overview" ? "Working Tree" : `Working Tree / ${section}`;
-  const level1 = section === "unstaged" ? `まだStagingへ内容を記録していない変更が ${count} 件あります。` : section === "untracked" ? `Gitがまだ追跡していないfileが ${count} 件あります。` : section === "conflicts" ? `解決が必要な競合が ${count} 件あります。` : tree.unstaged.length || tree.untracked.length || tree.conflicts.length ? `Working Treeには、Unstaged ${tree.unstaged.length}件、Untracked ${tree.untracked.length}件、Conflicts ${tree.conflicts.length}件があります。` : "Working Treeにcommitしていない変更はありません。";
+  const level1 = section === "unstaged" ? `まだStagingへ内容を記録していない変更が ${count} 件あります。` : section === "untracked" ? `Gitがまだ追跡していないfileが ${count} 件あります。` : section === "conflicts" ? `解決が必要な競合が ${count} 件あります。` : tree.unstaged.length || tree.untracked.length || tree.conflicts.length ? `Working Treeには、Unstaged ${tree.unstaged.length}件、Untracked ${tree.untracked.length}件、Conflicts ${tree.conflicts.length}件があります。` : tree.staged.length ? "Working Tree側にStagingへ未反映の変更はありません。" : "Working Treeにcommitしていない変更はありません。";
   return explanation(label, level1, "Working Treeは、実際に編集している作業内容がある状態です。Stagingとは別の状態で、git addでfile自体が物理的に移動するわけではありません。");
 }
 
