@@ -51,6 +51,18 @@ test("CommitDetail ignores an old repository response after a repository switch"
   const state = current(controller); assert.equal(state.kind, "available"); if (state.kind === "available") assert.equal(state.rootPath, "/b");
 });
 
+test("CommitDetail reuses an in-flight request when returning to the same commit", async () => {
+  const pending: Deferred[] = [];
+  const controller = new CommitDetailController({ read: () => { const next = new Deferred(); pending.push(next); return next.promise; } });
+  const snapshot = available("repo", "/repo", a, b);
+  controller.setPanelOpen(true, snapshot, { kind: "commit", commitId: a });
+  controller.sync(snapshot, { kind: "commit", commitId: b });
+  controller.sync(snapshot, { kind: "commit", commitId: a });
+  assert.equal(pending.length, 2);
+  pending[0].resolve({ kind: "available", value: detail(a) }); await settled();
+  const state = current(controller); assert.equal(state.kind, "available"); if (state.kind === "available") assert.equal(state.commitId, a);
+});
+
 function available(repositoryId: string, rootPath: string, ...ids: string[]): RepositoryStateSnapshot {
   return { kind: "available", repositoryId, state: { repository: { rootPath }, currentLocation: { kind: "branch", branchName: "main", head: { id: ids[0], shortId: ids[0].slice(0, 7), subject: "subject" }, detached: false }, localBranches: [{ name: "main", tipCommitId: ids[0] }], workingTree: { staged: [], unstaged: [], untracked: [], conflicts: [] }, history: ids.map((id) => ({ commit: { id, shortId: id.slice(0, 7), subject: "subject" }, parentIds: [] })), operation: { kind: "normal" }, remotes: { kind: "available", value: [] }, upstream: { kind: "notConfigured" }, stash: { kind: "available", value: [] }, comparison: { kind: "notConfigured" }, stateVersion: 1, refreshedAt: new Date(0) } };
 }

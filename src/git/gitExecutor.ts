@@ -46,6 +46,7 @@ interface CommandSignature {
     | "comparisonHistory"
     | "comparisonAnchors"
     | "commitDetailMetadata"
+    | "commitDetailParents"
     | "commitDetailRootFiles"
     | "commitDetailParentFiles";
   readonly args: readonly string[];
@@ -329,8 +330,11 @@ function findSignature(args: readonly string[]): CommandSignature | undefined {
     };
   }
 
-  if (args.length === 6 && args.slice(0, 5).every((argument, index) => argument === ["show", "-s", "--format=format:%H%x00%an%x00%aI%x00%P%x00", "--no-ext-diff", "--no-textconv"][index]) && isFullOid(args[5])) {
+  if (args.length === 6 && args.slice(0, 5).every((argument, index) => argument === ["show", "-s", "--format=format:%H%x00%an%x00%aI%x00", "--no-ext-diff", "--no-textconv"][index]) && isFullOid(args[5])) {
     return { id: "commitDetailMetadata", args, requiresCwd: true, stdin: "forbidden", fixedConfigArgs: ["-c", "log.showSignature=false"] };
+  }
+  if (args.length === 3 && args[0] === "cat-file" && args[1] === "commit" && isFullOid(args[2])) {
+    return { id: "commitDetailParents", args, requiresCwd: true, stdin: "forbidden" };
   }
   if (args.length === 9 && args.slice(0, 8).every((argument, index) => argument === ["diff-tree", "--no-commit-id", "--name-only", "-r", "-z", "--no-ext-diff", "--no-textconv", "--root"][index]) && isFullOid(args[8])) {
     return { id: "commitDetailRootFiles", args, requiresCwd: true, stdin: "forbidden" };

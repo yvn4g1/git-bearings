@@ -219,17 +219,22 @@ test("GitExecutor permits CommitDetail signatures only with full OIDs", async ()
   const executor = new GitExecutor("git", processExecutor, silentLogger);
   const a = "a".repeat(40);
   const b = "b".repeat(40);
-  await executor.execute(["show", "-s", "--format=format:%H%x00%an%x00%aI%x00%P%x00", "--no-ext-diff", "--no-textconv", a], "/repository");
+  await executor.execute(["show", "-s", "--format=format:%H%x00%an%x00%aI%x00", "--no-ext-diff", "--no-textconv", a], "/repository");
+  await executor.execute(["cat-file", "commit", a], "/repository");
   await executor.execute(["diff-tree", "--no-commit-id", "--name-only", "-r", "-z", "--no-ext-diff", "--no-textconv", "--root", a], "/repository");
   await executor.execute(["diff-tree", "--no-commit-id", "--name-only", "-r", "-z", "--no-ext-diff", "--no-textconv", a, b], "/repository");
-  assert.equal(processExecutor.requests.length, 3);
+  assert.equal(processExecutor.requests.length, 4);
   assert.deepEqual(processExecutor.requests[0].args.slice(0, 3), ["--no-pager", "-c", "log.showSignature=false"]);
   for (const invalid of ["HEAD", "main", "abc1234", `${a}^`, `${a}..${b}`, "--option"]) {
-    const result = await executor.execute(["show", "-s", "--format=format:%H%x00%an%x00%aI%x00%P%x00", "--no-ext-diff", "--no-textconv", invalid], "/repository");
+    const result = await executor.execute(["show", "-s", "--format=format:%H%x00%an%x00%aI%x00", "--no-ext-diff", "--no-textconv", invalid], "/repository");
     assert.deepEqual(result, { kind: "rejected", reason: "commandNotAllowed" });
+    assert.deepEqual(await executor.execute(["cat-file", "commit", invalid], "/repository"), { kind: "rejected", reason: "commandNotAllowed" });
+    assert.deepEqual(await executor.execute(["diff-tree", "--no-commit-id", "--name-only", "-r", "-z", "--no-ext-diff", "--no-textconv", "--root", invalid], "/repository"), { kind: "rejected", reason: "commandNotAllowed" });
+    assert.deepEqual(await executor.execute(["diff-tree", "--no-commit-id", "--name-only", "-r", "-z", "--no-ext-diff", "--no-textconv", a, invalid], "/repository"), { kind: "rejected", reason: "commandNotAllowed" });
   }
   for (const args of [
-    ["show", "-s", "--format=format:%H%x00%an%x00%aI%x00%P%x00", "--no-ext-diff", "--no-textconv", a, "path"],
+    ["show", "-s", "--format=format:%H%x00%an%x00%aI%x00", "--no-ext-diff", "--no-textconv", a, "path"],
+    ["cat-file", "commit", a, "path"],
     ["diff-tree", "--no-commit-id", "--name-only", "-r", "-z", "--no-ext-diff", "--no-textconv", a, "path"],
   ]) assert.deepEqual(await executor.execute(args, "/repository"), { kind: "rejected", reason: "commandNotAllowed" });
 });
