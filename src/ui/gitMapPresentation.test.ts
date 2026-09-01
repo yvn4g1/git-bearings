@@ -71,6 +71,13 @@ test("selection visual state keeps semantic targets in presentation", () => {
   assert.equal(createGitMapPresentation({ kind: "available", repositoryId: "repo", state: { ...baseState(), stash: { kind: "available", value: [{ index: 0, commitId: oid, message: "WIP" }] } } }, { kind: "stash", stashCommitId: oid }).stash.kind, "shelf");
 });
 
+test("CommitDetail presentation is limited to a selected commit", () => {
+  const detail = { kind: "loading" as const, repositoryId: "repo", rootPath: "/work/repository", commitId: oid };
+  const snapshot = { kind: "available" as const, repositoryId: "repo", state: { ...baseState(), history: [{ commit, parentIds: [] }] } };
+  assert.equal(createGitMapPresentation(snapshot, { kind: "head" }, detail).commitDetail, undefined);
+  assert.deepEqual(createGitMapPresentation(snapshot, { kind: "commit", commitId: oid }, detail).commitDetail, detail);
+});
+
 test("clean, same-path staging, stash, and remote states remain semantically separate", () => {
   const clean = presentation();
   assert.deepEqual(clean.workingTree, { kind: "clean", unstagedCount: 0, modifiedCount: 0, untrackedCount: 0, conflictsCount: 0 });

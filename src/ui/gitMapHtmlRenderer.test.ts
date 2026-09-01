@@ -56,6 +56,17 @@ test("Detail renders selected explanation in two levels and escapes its facts", 
   assert.ok(!html.includes("type:'explain'"));
 });
 
+test("Commit detail is local to commit Detail, escaped, and caps paths at 100", () => {
+  const paths = Array.from({ length: 101 }, (_, index) => `path-${index}${index === 0 ? " <&>" : ""}`);
+  const html = renderGitMapHtml({ ...presentation(), explanation: { identity: "commit abc", level1: "Level 1", level2: "Level 2" }, commitDetail: { kind: "available", repositoryId: "repo", rootPath: "/repo", commitId: "id", detail: { fullHash: "a".repeat(40), author: "Author <unsafe>", authoredAt: "2024-01-02T03:04:05+09:00", parents: [], changedFiles: paths, changedFileCount: 101 } } }, "nonce");
+  assert.ok(html.includes("Level 1")); assert.ok(html.includes("もっと詳しく")); assert.ok(html.includes("Full hash")); assert.ok(html.includes("Author &lt;unsafe&gt;")); assert.ok(html.includes("path-0 &lt;&amp;&gt;")); assert.ok(html.includes("他 1 件"));
+  assert.equal((html.match(/<li>/g) ?? []).length, 100); assert.ok(html.includes("Parents</dt><dd>なし"));
+  const loading = renderGitMapHtml({ ...presentation(), explanation: { identity: "commit abc", level1: "Level 1", level2: "Level 2" }, commitDetail: { kind: "loading", repositoryId: "repo", rootPath: "/repo", commitId: "id" } }, "nonce");
+  assert.ok(loading.includes("Commit詳細を読み込み中…"));
+  const failure = renderGitMapHtml({ ...presentation(), explanation: { identity: "commit abc", level1: "Level 1", level2: "Level 2" }, commitDetail: { kind: "unavailable", repositoryId: "repo", rootPath: "/repo", commitId: "id" } }, "nonce");
+  assert.ok(failure.includes("Commit詳細を取得できません"));
+});
+
 test("Remote unavailable uses Unknown grammar while missing Remote remains a fact", () => {
   const unavailable = renderGitMapHtml({ ...presentation(), remotes: [], remoteMessage: "Remote情報を取得できません", remoteUnavailableReason: "<remote failed>" }, "nonce");
   assert.ok(unavailable.includes("unknown-state")); assert.ok(unavailable.includes("unknown-symbol")); assert.ok(unavailable.includes("Remote情報を取得できません")); assert.ok(unavailable.includes("&lt;remote failed&gt;")); assert.ok(!unavailable.includes("<remote failed>"));

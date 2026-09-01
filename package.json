@@ -52,6 +52,7 @@
     "test:sidebar": "npm run compile && node --test out/ui/repositoryStateSnapshot.test.js out/ui/sidebarPresentation.test.js",
     "test:overview": "npm run compile && node --test out/ui/overviewPresentation.test.js out/ui/overviewHtmlRenderer.test.js",
     "test:explanation": "npm run compile && node --test out/ui/explanationPresentation.test.js",
+    "test:commit-detail": "npm run compile && node --test out/git/commitDetailReader.test.js out/ui/commitDetailController.test.js",
     "test:git-map": "npm run compile && node --test out/ui/commitGraphPresentation.test.js out/ui/gitMapPresentation.test.js out/ui/gitMapHtmlRenderer.test.js out/ui/gitMapMessage.test.js",
     "test:refresh": "npm run compile && node --test out/repository/repositoryStateRefreshController.test.js",
     "vscode:prepublish": "npm run compile"

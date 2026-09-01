@@ -19,6 +19,8 @@ import { BasePreferenceController, BASE_PREFERENCE_KEY } from "./repository/base
 import { createBaseSelectionCandidates } from "./repository/baseSelection";
 import { RepositoryStateSnapshotStore } from "./ui/repositoryStateSnapshot";
 import { RepositoryStateRefreshController } from "./repository/repositoryStateRefreshController";
+import { CommitDetailReader } from "./git/commitDetailReader";
+import { CommitDetailController } from "./ui/commitDetailController";
 
 const selectedRepositoryKey = "gitBearings.selectedRepository";
 
@@ -28,8 +30,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const outputChannel = vscode.window.createOutputChannel("Git Bearings");
   const snapshotStore = new RepositoryStateSnapshotStore();
   const appViewState = new AppViewStateStore<unknown>();
-  const sidebar = createGitBearingsSidebar(snapshotStore, appViewState);
-  const gitMapPanel = new GitMapPanel(snapshotStore, appViewState);
   const basePreference = new BasePreferenceController({
     read: () => context.workspaceState.get<unknown>(BASE_PREFERENCE_KEY),
     write: (value) => context.workspaceState.update(BASE_PREFERENCE_KEY, value),
@@ -46,9 +46,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
   const gitResolution = await resolveVscodeGitExecutable(vscode.extensions);
   const gitUnavailableReason = gitResolution.kind === "unavailable" ? gitResolution.reason : undefined;
-  const stateReader = gitResolution.kind === "available"
-    ? createRepositoryStateReader(gitResolution.path, outputChannel)
+  const readers = gitResolution.kind === "available"
+    ? createReaders(gitResolution.path, outputChannel)
     : undefined;
+  const stateReader = readers?.stateReader;
+  const commitDetails = new CommitDetailController({
+    read: (repositoryPath, commitId) => readers
+      ? readers.commitDetailReader.read(repositoryPath, commitId)
+      : Promise.resolve({ kind: "unavailable", reason: gitUnavailableReason ?? "Git executable is unavailable." }),
+  });
+  const sidebar = createGitBearingsSidebar(snapshotStore, appViewState);
+  const gitMapPanel = new GitMapPanel(snapshotStore, appViewState, commitDetails);
 
   refreshController = new RepositoryStateRefreshController({
     getSelectedRepository: () => {
@@ -145,13 +153,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   await source.initialize();
 }
 
-function createRepositoryStateReader(gitPath: string, logger: { appendLine(value: string): void }): RepositoryStateReader {
+function createReaders(gitPath: string, logger: { appendLine(value: string): void }): { readonly stateReader: RepositoryStateReader; readonly commitDetailReader: CommitDetailReader } {
   const executor = new GitExecutor(gitPath, new ProcessRunner(), logger);
-  return new RepositoryStateReader(
-    new CoreRepositoryReader(executor),
-    new SupplementalRepositoryReader(executor),
-    new BranchComparisonReader(executor),
-  );
+  return {
+    stateReader: new RepositoryStateReader(
+      new CoreRepositoryReader(executor),
+      new SupplementalRepositoryReader(executor),
+      new BranchComparisonReader(executor),
+    ),
+    commitDetailReader: new CommitDetailReader(executor),
+  };
 }
 
 async function getGitApi(): Promise<GitApiLike> {

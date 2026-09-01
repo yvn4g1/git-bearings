@@ -3,6 +3,7 @@ import type { SelectionState } from "../domain/appViewState";
 import { createCommitGraphPresentation, type CommitGraphPresentation } from "./commitGraphPresentation";
 import type { RepositoryStateSnapshot } from "./repositoryStateSnapshot";
 import { createExplanationPresentation, type ExplanationPresentation } from "./explanationPresentation";
+import type { CommitDetailState } from "../domain/commitDetail";
 
 export interface GitMapItem { readonly label: string; readonly value: string; }
 export interface WorkingTreePresentation { readonly kind: "clean" | "changes"; readonly unstagedCount: number; readonly modifiedCount: number; readonly untrackedCount: number; readonly conflictsCount: number; readonly visualState?: "selected" | "related"; }
@@ -30,10 +31,11 @@ export interface GitMapPresentation {
   readonly selection?: SelectionState;
   readonly detailIdentity?: string;
   readonly explanation?: ExplanationPresentation;
+  readonly commitDetail?: CommitDetailState;
   readonly upstreamVisualState?: "selected" | "related";
 }
 
-export function createGitMapPresentation(snapshot: RepositoryStateSnapshot, selection: SelectionState = { kind: "overview" }): GitMapPresentation {
+export function createGitMapPresentation(snapshot: RepositoryStateSnapshot, selection: SelectionState = { kind: "overview" }, commitDetail: CommitDetailState = { kind: "idle" }): GitMapPresentation {
   if (snapshot.kind === "empty") return unavailable(snapshot, "Git状態をまだ読み取っていません");
   if (snapshot.kind === "loading") return unavailable(snapshot, "Git状態を読み取り中…");
   if (snapshot.kind === "unavailable") return unavailable(snapshot, "Git状態を安全に取得できません", snapshot.reason);
@@ -42,7 +44,7 @@ export function createGitMapPresentation(snapshot: RepositoryStateSnapshot, sele
   return {
     status: "available", repository: state.repository.rootPath, operationBanner: operationBanner(state),
     workingTree: { kind: workingTree.unstaged.length || workingTree.untracked.length || workingTree.conflicts.length ? "changes" : "clean", unstagedCount: workingTree.unstaged.length, modifiedCount: workingTree.unstaged.filter((change) => change.kind === "modified").length, untrackedCount: workingTree.untracked.length, conflictsCount: workingTree.conflicts.length, ...(selection.kind === "workingTree" ? { visualState: "selected" as const } : {}) },
-    staging: { stagedCount: workingTree.staged.length, ...(selection.kind === "staging" ? { visualState: "selected" as const } : {}) }, stash: selectedStash(stashPresentation(state), selection), graph: selectedGraph(createCommitGraphPresentation(state), state, selection), ...remoteFacts(state, selection), detailSnapshot: snapshot, selection, detailIdentity: selectionIdentity(selection), explanation: createExplanationPresentation(state, selection), ...(selection.kind === "upstream" ? { upstreamVisualState: "selected" as const } : {}),
+    staging: { stagedCount: workingTree.staged.length, ...(selection.kind === "staging" ? { visualState: "selected" as const } : {}) }, stash: selectedStash(stashPresentation(state), selection), graph: selectedGraph(createCommitGraphPresentation(state), state, selection), ...remoteFacts(state, selection), detailSnapshot: snapshot, selection, detailIdentity: selectionIdentity(selection), explanation: createExplanationPresentation(state, selection), ...(selection.kind === "commit" ? { commitDetail } : {}), ...(selection.kind === "upstream" ? { upstreamVisualState: "selected" as const } : {}),
   };
 }
 

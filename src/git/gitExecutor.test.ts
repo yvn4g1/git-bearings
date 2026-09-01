@@ -214,6 +214,26 @@ test("GitExecutor rejects non-allowlisted and write signatures before spawn", as
   assert.equal(processExecutor.requests.length, 0);
 });
 
+test("GitExecutor permits CommitDetail signatures only with full OIDs", async () => {
+  const processExecutor = new RecordingProcessExecutor();
+  const executor = new GitExecutor("git", processExecutor, silentLogger);
+  const a = "a".repeat(40);
+  const b = "b".repeat(40);
+  await executor.execute(["show", "-s", "--format=format:%H%x00%an%x00%aI%x00%P%x00", "--no-ext-diff", "--no-textconv", a], "/repository");
+  await executor.execute(["diff-tree", "--no-commit-id", "--name-only", "-r", "-z", "--no-ext-diff", "--no-textconv", "--root", a], "/repository");
+  await executor.execute(["diff-tree", "--no-commit-id", "--name-only", "-r", "-z", "--no-ext-diff", "--no-textconv", a, b], "/repository");
+  assert.equal(processExecutor.requests.length, 3);
+  assert.deepEqual(processExecutor.requests[0].args.slice(0, 3), ["--no-pager", "-c", "log.showSignature=false"]);
+  for (const invalid of ["HEAD", "main", "abc1234", `${a}^`, `${a}..${b}`, "--option"]) {
+    const result = await executor.execute(["show", "-s", "--format=format:%H%x00%an%x00%aI%x00%P%x00", "--no-ext-diff", "--no-textconv", invalid], "/repository");
+    assert.deepEqual(result, { kind: "rejected", reason: "commandNotAllowed" });
+  }
+  for (const args of [
+    ["show", "-s", "--format=format:%H%x00%an%x00%aI%x00%P%x00", "--no-ext-diff", "--no-textconv", a, "path"],
+    ["diff-tree", "--no-commit-id", "--name-only", "-r", "-z", "--no-ext-diff", "--no-textconv", a, "path"],
+  ]) assert.deepEqual(await executor.execute(args, "/repository"), { kind: "rejected", reason: "commandNotAllowed" });
+});
+
 test("GitExecutor runs only exact allowed signatures with Git environment", async () => {
   const processExecutor = new RecordingProcessExecutor({
     kind: "completed",
