@@ -46,6 +46,16 @@ test("renderer applies presentation selection state to actual elements", () => {
   assert.ok(html.includes("選択中: Remote &amp; &lt;origin&gt;"));
 });
 
+test("Detail renders selected explanation in two levels and escapes its facts", () => {
+  const html = renderGitMapHtml({ ...presentation(), explanation: { identity: "branch <unsafe>", level1: "現在 <fact>", level2: "concept <detail>" } }, "nonce");
+  assert.ok(html.includes("選択中: branch &lt;unsafe&gt;"));
+  assert.ok(html.includes("現在 &lt;fact&gt;"));
+  assert.ok(html.includes("もっと詳しく"));
+  assert.ok(html.includes("concept &lt;detail&gt;"));
+  assert.ok(html.includes('<details open><summary>Detail</summary>'));
+  assert.ok(!html.includes("type:'explain'"));
+});
+
 test("Remote unavailable uses Unknown grammar while missing Remote remains a fact", () => {
   const unavailable = renderGitMapHtml({ ...presentation(), remotes: [], remoteMessage: "Remote情報を取得できません", remoteUnavailableReason: "<remote failed>" }, "nonce");
   assert.ok(unavailable.includes("unknown-state")); assert.ok(unavailable.includes("unknown-symbol")); assert.ok(unavailable.includes("Remote情報を取得できません")); assert.ok(unavailable.includes("&lt;remote failed&gt;")); assert.ok(!unavailable.includes("<remote failed>"));
