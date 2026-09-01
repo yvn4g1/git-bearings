@@ -3,6 +3,7 @@ import { execFile as execFileCallback } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import test from "node:test";
 import { CommitDetailReader, parseCommitDetailMetadata, parseCommitDetailParents, parseCommitDetailPaths } from "./commitDetailReader";
@@ -54,7 +55,7 @@ test("CommitDetailReader does not treat a shallow boundary as a root commit", as
   try {
     await git(source, "init"); await git(source, "config", "user.name", "Test Author"); await git(source, "config", "user.email", "test@example.invalid"); await git(source, "config", "commit.gpgsign", "false");
     for (const [path, content] of [["one.txt", "one"], ["two.txt", "two"], ["three.txt", "three"]] as const) { await write(source, path, content); await git(source, "add", path); await git(source, "commit", "-m", path); }
-    await rm(clone, { recursive: true, force: true }); await execFile("git", ["clone", "--depth", "1", `file://${source}`, clone]);
+    await rm(clone, { recursive: true, force: true }); await execFile("git", ["clone", "--depth", "1", pathToFileURL(source).href, clone]);
     const boundary = await head(clone); const raw = await execFile("git", ["cat-file", "commit", boundary], { cwd: clone });
     assert.match(raw.stdout, /^parent [0-9a-f]{40}$/m);
     const detail = await new CommitDetailReader(new GitExecutor("git", new ProcessRunner(), silentLogger)).read(clone, boundary);
