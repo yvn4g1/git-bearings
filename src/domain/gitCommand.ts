@@ -1,3 +1,7 @@
+export type RemoteBranchTarget =
+  | { readonly kind: "default" }
+  | { readonly kind: "explicit"; readonly remote: string; readonly branch: string };
+
 export type GitCommand =
   | { readonly kind: "add"; readonly target: { readonly kind: "repositoryRoot" } | { readonly kind: "paths"; readonly paths: readonly string[] } }
   | { readonly kind: "unstage"; readonly paths: readonly string[]; readonly syntax: "restoreStaged" | "resetHead" }
@@ -8,8 +12,9 @@ export type GitCommand =
   | { readonly kind: "stashApply"; readonly stashIndex?: number }
   | { readonly kind: "stashPop"; readonly stashIndex?: number }
   | { readonly kind: "fetch"; readonly remote?: string }
-  | { readonly kind: "push"; readonly remote?: string; readonly branch?: string; readonly setUpstream: boolean }
-  | { readonly kind: "pull"; readonly remote?: string; readonly branch?: string; readonly rebase: boolean }
+  | { readonly kind: "push"; readonly target: { readonly kind: "default" }; readonly setUpstream: false }
+  | { readonly kind: "push"; readonly target: { readonly kind: "explicit"; readonly remote: string; readonly branch: string }; readonly setUpstream: boolean }
+  | { readonly kind: "pull"; readonly target: RemoteBranchTarget; readonly rebase: boolean }
   | { readonly kind: "merge"; readonly branch: string }
   | { readonly kind: "rebase"; readonly upstream: string };
 

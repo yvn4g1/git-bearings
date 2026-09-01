@@ -72,9 +72,11 @@ function reset(args: readonly string[]): GitCommandParseResult {
   return parsed({ kind: "unstage", syntax: "resetHead", paths: args.slice(1) });
 }
 function commit(args: readonly string[]): GitCommandParseResult {
-  const bad = firstOption(args.filter((value) => value !== "-m")); if (bad) return unsupportedOption("commit", bad);
   if (!args.length) return parsed({ kind: "commit" });
-  if (args[0] !== "-m" || args.length !== 2) return failure("commitの引数形が不正です。");
+  if (args[0] !== "-m") return option(args[0]) ? unsupportedOption("commit", args[0]) : failure("commitの引数形が不正です。");
+  if (args.length !== 2) { const bad = firstOption(args.slice(1)); return bad && bad !== "-m" ? unsupportedOption("commit", bad) : failure("commitの引数形が不正です。"); }
+  if (args[1] === "-m") return failure("-mを重複指定できません。");
+  if (option(args[1])) return unsupportedOption("commit", args[1]);
   return parsed({ kind: "commit", message: args[1] });
 }
 function switchBranch(args: readonly string[]): GitCommandParseResult {
@@ -90,13 +92,18 @@ function stash(args: readonly string[]): GitCommandParseResult {
     for (let index = 0; index < rest.length; index += 1) {
       const value = rest[index];
       if (value === "-u") { if (includeUntracked) return failure("-uを重複指定できません。"); includeUntracked = true; continue; }
-      if (value === "-m") { if (message !== undefined || index + 1 >= rest.length) return failure("-mのmessageが不正です。"); message = rest[++index]; continue; }
+      if (value === "-m") {
+        const next = rest[index + 1];
+        if (message !== undefined || next === undefined || next === "-u" || next === "-m") return failure("-mのmessageが不正です。");
+        if (option(next)) return unsupportedOption("stash", next);
+        message = next; index += 1; continue;
+      }
       if (option(value)) return unsupportedOption("stash", value);
       return failure("stash pushの引数形が不正です。");
     }
     return parsed({ kind: "stashPush", includeUntracked, ...(message === undefined ? {} : { message }) });
   }
-  if (action === "list") return rest.length ? failure("stash listに引数は指定できません。") : parsed({ kind: "stashList" });
+  if (action === "list") { const bad = firstOption(rest); return bad ? unsupportedOption("stash", bad) : rest.length ? failure("stash listに引数は指定できません。") : parsed({ kind: "stashList" }); }
   if (action === "apply" || action === "pop") {
     const bad = firstOption(rest); if (bad) return unsupportedOption("stash", bad);
     if (rest.length > 1) return failure("stash selectorは1つだけです。");
@@ -110,20 +117,20 @@ function fetch(args: readonly string[]): GitCommandParseResult { const bad = fir
 function push(args: readonly string[]): GitCommandParseResult {
   const risk = forceOption(args); if (risk) return high("push", "force pushはhigh riskです。");
   const bad = firstOption(args.filter((value) => value !== "-u")); if (bad) return unsupportedOption("push", bad);
-  if (!args.length) return parsed({ kind: "push", setUpstream: false });
+  if (!args.length) return parsed({ kind: "push", target: { kind: "default" }, setUpstream: false });
   const setUpstream = args[0] === "-u"; const operands = setUpstream ? args.slice(1) : args;
-  return operands.length === 2 && validOperands(operands) ? parsed({ kind: "push", remote: operands[0], branch: operands[1], setUpstream }) : failure("pushのremoteとbranchが必要です。");
+  return operands.length === 2 && validOperands(operands) ? parsed({ kind: "push", target: { kind: "explicit", remote: operands[0], branch: operands[1] }, setUpstream }) : failure("pushのremoteとbranchが必要です。");
 }
 function pull(args: readonly string[]): GitCommandParseResult {
   const bad = firstOption(args.filter((value) => value !== "--rebase")); if (bad) return unsupportedOption("pull", bad);
   const rebase = args[0] === "--rebase"; const operands = rebase ? args.slice(1) : args;
   if (args.filter((value) => value === "--rebase").length > 1) return failure("--rebaseを重複指定できません。");
-  return operands.length === 0 ? parsed({ kind: "pull", rebase }) : operands.length === 2 && validOperands(operands) ? parsed({ kind: "pull", remote: operands[0], branch: operands[1], rebase }) : failure("pullのremoteとbranchが必要です。");
+  return operands.length === 0 ? parsed({ kind: "pull", target: { kind: "default" }, rebase }) : operands.length === 2 && validOperands(operands) ? parsed({ kind: "pull", target: { kind: "explicit", remote: operands[0], branch: operands[1] }, rebase }) : failure("pullのremoteとbranchが必要です。");
 }
 function oneOperand(commandName: "merge" | "rebase", args: readonly string[], create: (value: string) => GitCommand): GitCommandParseResult { const bad = firstOption(args); if (bad) return unsupportedOption(commandName, bad); return args.length === 1 && operand(args[0]) ? parsed(create(args[0])) : failure(`${commandName}の対象が必要です。`); }
 function highRisk(command: string, args: readonly string[]): GitCommandParseResult | undefined { if (command === "reset" && args.includes("--hard")) return high(command, "hard resetはhigh riskです。"); if (command === "push" && forceOption(args)) return high(command, "force pushはhigh riskです。"); if (command === "clean" && args.some((value) => value === "--force" || /^-[a-z]*f[a-z]*$/.test(value))) return high(command, "clean --forceはhigh riskです。"); return undefined; }
-function forceOption(args: readonly string[]): string | undefined { return args.find((value) => value === "-f" || value === "--force" || value === "--force-with-lease"); }
-function stashIndex(value: string): number | undefined { const match = /^stash@\{(\d+)\}$/.exec(value); return match ? Number(match[1]) : undefined; }
+function forceOption(args: readonly string[]): string | undefined { return args.find((value) => value === "-f" || value === "--force" || value === "--force-with-lease" || value.startsWith("--force-with-lease=")); }
+function stashIndex(value: string): number | undefined { const match = /^stash@\{(0|[1-9][0-9]*)\}$/.exec(value); if (!match) return undefined; const index = Number(match[1]); return Number.isSafeInteger(index) ? index : undefined; }
 function option(value: string | undefined): value is string { return value !== undefined && value.startsWith("-"); }
 function firstOption(values: readonly string[]): string | undefined { return values.find(option); }
 function operand(value: string | undefined): value is string { return value !== undefined && value !== "" && !option(value); }
