@@ -9,7 +9,7 @@ export function reconcileSelection(selection: SelectionState, snapshot: Reposito
   const state = snapshot.state;
   switch (selection.kind) {
     case "head": return state.currentLocation.kind === "unborn" || state.currentLocation.head ? selection : { kind: "overview" };
-    case "branch": return state.localBranches.some((branch) => branch.name === selection.branchName) ? selection : { kind: "overview" };
+    case "branch": return state.localBranches.some((branch) => branch.name === selection.branchName) || (state.currentLocation.kind === "unborn" && state.currentLocation.branchName === selection.branchName) ? selection : { kind: "overview" };
     case "commit": return state.history.some((entry) => entry.commit.id === selection.commitId) ? selection : { kind: "overview" };
     case "branchComparison": return state.comparison.kind === "available" && state.comparison.value.baseRef === selection.baseRef ? selection : { kind: "overview" };
     case "workingTree": return selection;
