@@ -23,6 +23,16 @@ test("stash push distinguishes tracked, untracked, no-op, and blocked facts", ()
   assert.equal(simulateGitCommand(state({ operation: { kind: "merge" } }), command({ kind: "stashPush", includeUntracked: false })).kind, "unsupported");
 });
 
+test("stash push covers each tracked bucket and -u combinations", () => {
+  const staged = simulateGitCommand(state({ workingTree: { staged: [{ path: "a", kind: "modified" }], unstaged: [], untracked: [], conflicts: [] } }), command({ kind: "stashPush", includeUntracked: false }));
+  const unstaged = simulateGitCommand(state({ workingTree: { staged: [], unstaged: [{ path: "a", kind: "modified" }], untracked: [], conflicts: [] } }), command({ kind: "stashPush", includeUntracked: false }));
+  const both = simulateGitCommand(state({ workingTree: { staged: [{ path: "a", kind: "modified" }], unstaged: [{ path: "b", kind: "modified" }], untracked: [], conflicts: [] } }), command({ kind: "stashPush", includeUntracked: false }));
+  for (const result of [staged, unstaged, both]) assert.deepEqual(result.events, [{ kind: "stashCreated" }, { kind: "trackedChangesStashed" }]);
+  const withUntracked = simulateGitCommand(state({ workingTree: { staged: [{ path: "a", kind: "modified" }], unstaged: [], untracked: ["u"], conflicts: [] } }), command({ kind: "stashPush", includeUntracked: true }));
+  assert.deepEqual(withUntracked.events, [{ kind: "stashCreated" }, { kind: "trackedChangesStashed" }, { kind: "untrackedChangesStashed" }]);
+  assert.deepEqual(simulateGitCommand(state(), command({ kind: "stashPush", includeUntracked: true })).events, [{ kind: "noOp" }]);
+});
+
 test("stash list is no-op and apply/pop preserve target uncertainty and ordering", () => {
   assert.deepEqual(simulateGitCommand(state(), command({ kind: "stashList" })).events, [{ kind: "noOp" }]);
   const apply = simulateGitCommand(state(), command({ kind: "stashApply" }));
@@ -39,6 +49,15 @@ test("stash list is no-op and apply/pop preserve target uncertainty and ordering
   assert.equal(simulateGitCommand(operation, command({ kind: "stashApply" })).kind, "unsupported"); assert.equal(simulateGitCommand(operation, command({ kind: "stashPop" })).kind, "unsupported");
 });
 
+test("stash apply and pop resolve multiple factual entries by index", () => {
+  const multiple = state({ stash: { kind: "available", value: [{ index: 0, commitId: id, message: "new" }, { index: 2, commitId: "f".repeat(40), message: "older" }] } });
+  assert.deepEqual(simulateGitCommand(multiple, command({ kind: "stashApply" })).events, [{ kind: "stashChangesApplied" }]);
+  assert.deepEqual(simulateGitCommand(multiple, command({ kind: "stashApply", stashIndex: 2 })).events, [{ kind: "stashChangesApplied", stashIndex: 2 }]);
+  const pop = simulateGitCommand(multiple, command({ kind: "stashPop", stashIndex: 2 }));
+  assert.deepEqual(pop.events, [{ kind: "stashChangesApplied", stashIndex: 2 }, { kind: "stashEntryRemovedAfterSuccessfulApply", stashIndex: 2 }]);
+  assert.equal(simulateGitCommand(multiple, command({ kind: "stashApply", stashIndex: 2 })).events.some((event) => event.kind === "stashEntryRemovedAfterSuccessfulApply"), false);
+});
+
 test("fetch keeps its default target and only predicts conditional remote-tracking refresh", () => {
   const result = simulateGitCommand(state(), command({ kind: "fetch" }));
   assert.equal(result.risk, "caution");
@@ -47,6 +66,11 @@ test("fetch keeps its default target and only predicts conditional remote-tracki
   assert.equal(JSON.stringify(result).includes("refs/remotes/origin/main"), false);
   const unavailable = simulateGitCommand(state({ remotes: { kind: "unavailable", reason: "read failed" } }), command({ kind: "fetch", remote: "origin" }));
   assert.deepEqual(unavailable.events[0], { kind: "fetchRequested", target: { remote: "origin", configuration: "unknown" } });
+  const confirmed = simulateGitCommand(state(), command({ kind: "fetch", remote: "origin" }));
+  const notFound = simulateGitCommand(state(), command({ kind: "fetch", remote: "other" }));
+  assert.deepEqual(confirmed.events[0], { kind: "fetchRequested", target: { remote: "origin", configuration: "confirmed" } });
+  assert.deepEqual(notFound.events[0], { kind: "fetchRequested", target: { remote: "other", configuration: "notFound" } });
+  for (const item of [confirmed, notFound, unavailable]) assert.equal(JSON.stringify(item).includes("localTipCommitId"), false);
 });
 
 test("push uses a known local ref only when factual, never sends uncommitted changes, and keeps default target unknown", () => {
@@ -62,4 +86,17 @@ test("push uses a known local ref only when factual, never sends uncommitted cha
   assert.equal(unknownUpstream.unknowns.some((note) => note.code === "upstreamConfigurationUnknown"), true);
   const unknownSource = simulateGitCommand(state(), command({ kind: "push", target: { kind: "explicit", remote: "origin", branch: "tag-like" }, setUpstream: true }));
   assert.equal(unknownSource.events.some((event) => event.kind === "branchUpstreamConfigured"), false);
+  const remoteNotConfigured = simulateGitCommand(state({ remotes: { kind: "available", value: [] } }), command({ kind: "push", target: { kind: "explicit", remote: "origin", branch: "feature" }, setUpstream: true }));
+  assert.equal(remoteNotConfigured.events.some((event) => event.kind === "branchUpstreamConfigured"), false);
+});
+
+test("push retains last-fetched relation as a caution without treating it as live Remote fact", () => {
+  const relation = (ahead: number, behind: number) => ({ kind: "available" as const, value: { remoteName: "origin", branchName: "main", trackingRef: "refs/remotes/origin/main", relation: { kind: "available" as const, value: { ahead, behind } } } });
+  const ahead = simulateGitCommand(state({ upstream: relation(2, 0) }), command({ kind: "push", target: { kind: "explicit", remote: "origin", branch: "main" }, setUpstream: false }));
+  const equal = simulateGitCommand(state({ upstream: relation(0, 0) }), command({ kind: "push", target: { kind: "explicit", remote: "origin", branch: "main" }, setUpstream: false }));
+  const behind = simulateGitCommand(state({ upstream: relation(0, 1) }), command({ kind: "push", target: { kind: "explicit", remote: "origin", branch: "main" }, setUpstream: false }));
+  const diverged = simulateGitCommand(state({ upstream: relation(2, 1) }), command({ kind: "push", target: { kind: "explicit", remote: "origin", branch: "main" }, setUpstream: false }));
+  assert.equal(ahead.warnings.some((note) => note.code === "lastFetchedPushRelationMayReject"), false); assert.equal(equal.warnings.some((note) => note.code === "lastFetchedPushRelationMayReject"), false);
+  assert.equal(behind.warnings.some((note) => note.code === "lastFetchedPushRelationMayReject"), true); assert.equal(diverged.warnings.some((note) => note.code === "lastFetchedPushRelationMayReject"), true);
+  for (const result of [ahead, equal, behind, diverged]) assert.equal(result.warnings.some((note) => note.code === "liveRemoteStateUnknown"), true);
 });

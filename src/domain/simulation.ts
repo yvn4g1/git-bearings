@@ -14,6 +14,7 @@ export type SimulationNote =
   | { readonly code: "stashTargetUnknown" }
   | { readonly code: "liveRemoteStateUnknown" }
   | { readonly code: "pushMayBeRejected" }
+  | { readonly code: "lastFetchedPushRelationMayReject"; readonly ahead: number; readonly behind: number }
   | { readonly code: "defaultTargetUnknown"; readonly operation: "fetch" | "push" }
   | { readonly code: "pushSourceUnknown"; readonly branchName: string }
   | { readonly code: "upstreamConfigurationUnknown"; readonly remoteName: string; readonly branchName: string }

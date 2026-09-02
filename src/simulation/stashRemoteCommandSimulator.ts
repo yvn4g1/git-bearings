@@ -50,6 +50,8 @@ function push(state: RepositoryState, command: Extract<GitCommand, { kind: "push
   const targetSpec = command.target;
   const localBranch = state.localBranches.find((branch) => branch.name === targetSpec.branch);
   const target = { remote: targetSpec.remote, branch: targetSpec.branch, ...(localBranch ? { localTipCommitId: localBranch.tipCommitId } : {}) };
+  const relation = state.currentLocation.kind === "branch" && state.currentLocation.branchName === targetSpec.branch && state.upstream.kind === "available" && state.upstream.value.remoteName === targetSpec.remote && state.upstream.value.branchName === targetSpec.branch && state.upstream.value.relation.kind === "available" ? state.upstream.value.relation.value : undefined;
+  if (relation && relation.behind > 0) warnings.push({ code: "lastFetchedPushRelationMayReject", ahead: relation.ahead, behind: relation.behind });
   if (!localBranch) unknowns.push({ code: "pushSourceUnknown", branchName: targetSpec.branch });
   const events: SimulationEvent[] = [{ kind: "pushRequested", target }, { kind: "derivedRelationInvalidated", relation: "upstream" }, { kind: "derivedRelationInvalidated", relation: "comparison" }];
   if (command.setUpstream && localBranch && state.remotes.kind === "available" && state.remotes.value.some((remote) => remote.name === targetSpec.remote)) events.push({ kind: "branchUpstreamConfigured", branchName: targetSpec.branch, remoteName: targetSpec.remote, remoteBranchName: targetSpec.branch });
