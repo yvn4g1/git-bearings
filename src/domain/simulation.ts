@@ -15,7 +15,9 @@ export type SimulationNote =
   | { readonly code: "liveRemoteStateUnknown" }
   | { readonly code: "pushMayBeRejected" }
   | { readonly code: "defaultTargetUnknown"; readonly operation: "fetch" | "push" }
+  | { readonly code: "pushSourceUnknown"; readonly branchName: string }
   | { readonly code: "upstreamConfigurationUnknown"; readonly remoteName: string; readonly branchName: string }
+  | { readonly code: "stashApplyDoesNotGuaranteeStagedness" }
   | { readonly code: "uncommittedChangesNotPushed" };
 
 export interface PredictedCommit {
@@ -41,7 +43,7 @@ export type SimulationEvent =
   | { readonly kind: "untrackedChangesStashed" }
   | { readonly kind: "stashChangesApplied"; readonly stashIndex?: number }
   | { readonly kind: "stashEntryRemovedAfterSuccessfulApply"; readonly stashIndex?: number }
-  | { readonly kind: "fetchRequested"; readonly target: "default" | { readonly remote: string; readonly configured: boolean } }
+  | { readonly kind: "fetchRequested"; readonly target: "default" | { readonly remote: string; readonly configuration: "confirmed" | "notFound" | "unknown" } }
   | { readonly kind: "remoteTrackingMayRefresh" }
   | { readonly kind: "pushRequested"; readonly target: "default" | { readonly remote: string; readonly branch: string; readonly localTipCommitId?: string } }
   | { readonly kind: "branchUpstreamConfigured"; readonly branchName: string; readonly remoteName: string; readonly remoteBranchName: string }

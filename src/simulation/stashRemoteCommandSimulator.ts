@@ -29,14 +29,14 @@ function stashApplyPop(state: RepositoryState, command: Extract<GitCommand, { ki
   if (state.workingTree.conflicts.length) return { ...base, kind: "blocked", reason: "stashCannotRunWithConflicts" };
   const index = command.stashIndex ?? 0;
   if (state.stash.kind === "available" && !state.stash.value.some((entry) => entry.index === index)) return { ...base, kind: "blocked", reason: "stashEntryMissing" };
-  const unknowns: SimulationNote[] = [{ code: "futureWorkingTreeAndIndexUnknown" }];
+  const unknowns: SimulationNote[] = [{ code: "futureWorkingTreeAndIndexUnknown" }, { code: "stashApplyDoesNotGuaranteeStagedness" }];
   if (state.stash.kind === "unavailable") unknowns.push({ code: "stashTargetUnknown" });
   const events: SimulationEvent[] = state.stash.kind === "unavailable" ? [] : [{ kind: "stashChangesApplied", ...(command.stashIndex === undefined ? {} : { stashIndex: index }) }];
   if (pop && events.length) events.push({ kind: "stashEntryRemovedAfterSuccessfulApply", ...(command.stashIndex === undefined ? {} : { stashIndex: index }) });
   return { ...base, kind: "supported", events, risk: "caution", warnings: [{ code: "stashApplyMayConflict" }], unknowns };
 }
 function fetch(state: RepositoryState, command: Extract<GitCommand, { kind: "fetch" }>, base: Base): SimulationResult {
-  const target = command.remote === undefined ? "default" as const : { remote: command.remote, configured: state.remotes.kind === "available" && state.remotes.value.some((remote) => remote.name === command.remote) };
+  const target = command.remote === undefined ? "default" as const : { remote: command.remote, configuration: state.remotes.kind === "unavailable" ? "unknown" as const : state.remotes.kind === "available" && state.remotes.value.some((remote) => remote.name === command.remote) ? "confirmed" as const : "notFound" as const };
   return { ...base, kind: "supported", events: [{ kind: "fetchRequested", target }, { kind: "remoteTrackingMayRefresh" }, { kind: "derivedRelationInvalidated", relation: "upstream" }, { kind: "derivedRelationInvalidated", relation: "comparison" }], risk: "caution", unknowns: [{ code: "futureTrackingRelationUnknown" }, ...(command.remote === undefined ? [{ code: "defaultTargetUnknown", operation: "fetch" } as const] : [])] };
 }
 function push(state: RepositoryState, command: Extract<GitCommand, { kind: "push" }>, base: Base): SimulationResult {
@@ -50,9 +50,9 @@ function push(state: RepositoryState, command: Extract<GitCommand, { kind: "push
   const targetSpec = command.target;
   const localBranch = state.localBranches.find((branch) => branch.name === targetSpec.branch);
   const target = { remote: targetSpec.remote, branch: targetSpec.branch, ...(localBranch ? { localTipCommitId: localBranch.tipCommitId } : {}) };
-  if (!localBranch) unknowns.push({ code: "unknownPathScope", path: targetSpec.branch });
+  if (!localBranch) unknowns.push({ code: "pushSourceUnknown", branchName: targetSpec.branch });
   const events: SimulationEvent[] = [{ kind: "pushRequested", target }, { kind: "derivedRelationInvalidated", relation: "upstream" }, { kind: "derivedRelationInvalidated", relation: "comparison" }];
-  if (command.setUpstream && state.remotes.kind === "available" && state.remotes.value.some((remote) => remote.name === targetSpec.remote)) events.push({ kind: "branchUpstreamConfigured", branchName: targetSpec.branch, remoteName: targetSpec.remote, remoteBranchName: targetSpec.branch });
+  if (command.setUpstream && localBranch && state.remotes.kind === "available" && state.remotes.value.some((remote) => remote.name === targetSpec.remote)) events.push({ kind: "branchUpstreamConfigured", branchName: targetSpec.branch, remoteName: targetSpec.remote, remoteBranchName: targetSpec.branch });
   else if (command.setUpstream) unknowns.push({ code: "upstreamConfigurationUnknown", remoteName: targetSpec.remote, branchName: targetSpec.branch });
   return { ...base, kind: "supported", events, risk: "caution", warnings, unknowns };
 }
