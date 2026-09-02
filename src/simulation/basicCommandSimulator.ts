@@ -3,7 +3,7 @@ import type { FileChange, RepositoryState } from "../domain/repositoryState";
 import type { SimulationEvent, SimulationNote, SimulationResult } from "../domain/simulation";
 
 export function simulateBasicGitCommand(state: RepositoryState, command: GitCommand): SimulationResult {
-  const base = { repository: state.repository, basedOnStateVersion: state.stateVersion, command, events: [] as readonly SimulationEvent[], warnings: [] as readonly SimulationNote[], assumptions: [] as readonly SimulationNote[], unknowns: [] as readonly SimulationNote[] };
+  const base = { repository: state.repository, basedOnStateVersion: state.stateVersion, command, events: [] as readonly SimulationEvent[], warnings: [] as readonly SimulationNote[], assumptions: [] as readonly SimulationNote[], unknowns: [] as readonly SimulationNote[], risk: "normal" as const };
   if (state.operation.kind !== "normal") return { ...base, kind: "unsupported", reason: "operationNotNormal" };
   switch (command.kind) {
     case "add": return add(state, command, base);
@@ -22,13 +22,14 @@ function add(state: RepositoryState, command: Extract<GitCommand, { kind: "add" 
   for (const path of paths) {
     if (hasConflict(state, path)) { unknowns.push({ code: "conflictResolutionNotModeled", path }); continue; }
     if (state.workingTree.unstaged.some((item) => item.path === path)) events.push(stagedPaths.has(path) ? { kind: "stagingUpdated", path } : { kind: "stagingReflected", path, source: "unstaged" });
-    else if (state.workingTree.untracked.includes(path)) events.push({ kind: "stagingReflected", path, source: "untracked" });
+    else if (state.workingTree.untracked.includes(path)) events.push(stagedPaths.has(path) ? { kind: "stagingUpdated", path } : { kind: "stagingReflected", path, source: "untracked" });
+    else if (stagedPaths.has(path)) continue;
     else if (command.target.kind === "paths") unknowns.push({ code: "unknownPathScope", path });
   }
   if (command.target.kind === "repositoryRoot") {
     for (const conflict of state.workingTree.conflicts) unknowns.push({ code: "conflictResolutionNotModeled", path: conflict.path });
   }
-  return { ...base, kind: "supported", events: events.length ? events : [{ kind: "noOp" }], unknowns };
+  return { ...base, kind: "supported", events: eventsOrNoOp(events, unknowns), unknowns };
 }
 function unstage(state: RepositoryState, command: Extract<GitCommand, { kind: "unstage" }>, base: Base): SimulationResult {
   if (state.currentLocation.kind === "unborn") return { ...base, kind: "blocked", reason: "unbornHead" };
@@ -38,7 +39,7 @@ function unstage(state: RepositoryState, command: Extract<GitCommand, { kind: "u
     else if (command.syntax === "resetHead" || knownTracked(state, path)) events.push({ kind: "noOp" });
     else unknowns.push({ code: "unknownPathScope", path });
   }
-  return { ...base, kind: "supported", events: events.length ? events : [{ kind: "noOp" }], unknowns };
+  return { ...base, kind: "supported", events: eventsOrNoOp(events, unknowns), unknowns };
 }
 function commit(state: RepositoryState, command: Extract<GitCommand, { kind: "commit" }>, base: Base): SimulationResult {
   if (!state.workingTree.staged.length) return { ...base, kind: "blocked", reason: "nothingStaged" };
@@ -51,8 +52,8 @@ function commit(state: RepositoryState, command: Extract<GitCommand, { kind: "co
     : state.currentLocation.kind === "unborn"
       ? { kind: "branchPointerMoved", branchName: state.currentLocation.branchName, target: { kind: "newCommit", parentCommitIds: parents } }
       : { kind: "branchPointerMoved", branchName: state.currentLocation.branchName, target: { kind: "newCommit", parentCommitIds: parents } };
-  const relation: SimulationEvent[] = state.currentLocation.kind === "detached" ? [] : [{ kind: "headSymbolicRefChanged", branchName: state.currentLocation.branchName }];
-  return { ...base, kind: "supported", events: [{ kind: "stagingCleared" }, created, next, ...relation, { kind: "derivedRelationInvalidated", relation: "comparison" }, { kind: "derivedRelationInvalidated", relation: "upstream" }], assumptions: command.message === undefined ? [{ code: "interactiveCommitMessageRequired" }] : [], unknowns: [{ code: "futureTrackingRelationUnknown" }] };
+  const relation: SimulationEvent[] = state.currentLocation.kind === "detached" ? [] : [{ kind: "headBranchRelationRetained", branchName: state.currentLocation.branchName }];
+  return { ...base, kind: "supported", events: [created, next, ...relation, { kind: "stagedChangesCleared" }, { kind: "derivedRelationInvalidated", relation: "comparison" }, { kind: "derivedRelationInvalidated", relation: "upstream" }], assumptions: command.message === undefined ? [{ code: "interactiveCommitMessageRequired" }] : [], unknowns: [{ code: "futureTrackingRelationUnknown" }] };
 }
 function switchExisting(state: RepositoryState, command: Extract<GitCommand, { kind: "switch" }>, base: Base): SimulationResult {
   const target = state.localBranches.find((branch) => branch.name === command.branchName);
@@ -62,13 +63,16 @@ function switchExisting(state: RepositoryState, command: Extract<GitCommand, { k
   const headId = state.currentLocation.kind === "unborn" ? undefined : state.currentLocation.head.id;
   const dirty = state.workingTree.staged.length + state.workingTree.unstaged.length + state.workingTree.untracked.length > 0;
   const uncertain = dirty && headId !== target.tipCommitId;
-  return { ...base, kind: "supported", events: [{ kind: "headSymbolicRefChanged", branchName: target.name }], warnings: uncertain ? [{ code: "dirtySwitchMayFail" }] : [], unknowns: uncertain ? [{ code: "futureWorkingTreeAndIndexUnknown" }, { code: "futureTrackingRelationUnknown" }] : [] };
+  const events: SimulationEvent[] = [{ kind: "headSymbolicRefChanged", branchName: target.name }, { kind: "derivedRelationInvalidated", relation: "upstream" }];
+  if (headId !== target.tipCommitId) events.push({ kind: "derivedRelationInvalidated", relation: "comparison" });
+  return { ...base, kind: "supported", events, risk: uncertain ? "caution" : "normal", warnings: uncertain ? [{ code: "dirtySwitchMayFail" }] : [], unknowns: uncertain ? [{ code: "futureWorkingTreeAndIndexUnknown" }, { code: "futureTrackingRelationUnknown" }] : [] };
 }
 function switchCreate(state: RepositoryState, command: Extract<GitCommand, { kind: "switch" }>, base: Base): SimulationResult {
   if (state.localBranches.some((branch) => branch.name === command.branchName)) return { ...base, kind: "blocked", reason: "branchAlreadyExists" };
   const assumptions: SimulationNote[] = [{ code: "branchNameAcceptedByGit", branchName: command.branchName }];
-  if (state.currentLocation.kind === "unborn") return { ...base, kind: "supported", events: [{ kind: "unbornSymbolicBranchChanged", branchName: command.branchName }], assumptions };
-  return { ...base, kind: "supported", events: [{ kind: "branchCreated", branchName: command.branchName, target: { kind: "existingCommit", id: state.currentLocation.head.id } }, { kind: "headSymbolicRefChanged", branchName: command.branchName }], assumptions };
+  if (state.currentLocation.kind === "unborn") return { ...base, kind: "supported", events: [{ kind: "unbornSymbolicBranchChanged", branchName: command.branchName }, { kind: "derivedRelationInvalidated", relation: "upstream" }], assumptions };
+  return { ...base, kind: "supported", events: [{ kind: "branchCreated", branchName: command.branchName, target: { kind: "existingCommit", id: state.currentLocation.head.id } }, { kind: "headSymbolicRefChanged", branchName: command.branchName }, { kind: "derivedRelationInvalidated", relation: "upstream" }], assumptions };
 }
 function hasConflict(state: RepositoryState, path: string): boolean { return state.workingTree.conflicts.some((item) => item.path === path); }
 function knownTracked(state: RepositoryState, path: string): boolean { return state.workingTree.staged.some((item) => item.path === path) || state.workingTree.unstaged.some((item) => item.path === path); }
+function eventsOrNoOp(events: readonly SimulationEvent[], unknowns: readonly SimulationNote[]): readonly SimulationEvent[] { return events.length ? events : unknowns.length ? [] : [{ kind: "noOp" }]; }

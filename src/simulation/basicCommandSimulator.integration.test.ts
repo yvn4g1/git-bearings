@@ -10,7 +10,7 @@ const execFile = promisify(execFileCallback);
 async function git(cwd: string, ...args: string[]): Promise<string> { return (await execFile("git", args, { cwd })).stdout; }
 async function repository(): Promise<string> {
   const path = await mkdtemp(join(tmpdir(), "git-bearings-simulator-"));
-  await git(path, "init", "--initial-branch=main");
+  await git(path, "init"); await git(path, "symbolic-ref", "HEAD", "refs/heads/main");
   await git(path, "config", "user.name", "Simulator Test"); await git(path, "config", "user.email", "simulator@example.test");
   await git(path, "config", "commit.gpgsign", "false"); await git(path, "config", "core.hooksPath", join(path, "no-hooks"));
   return path;
@@ -22,6 +22,7 @@ test("real Git keeps latest add in the index and unstage keeps Working Tree cont
   try {
     await commitFile(path, "a.txt", "one\n");
     await writeFile(join(path, "a.txt"), "two\n"); await git(path, "add", "a.txt");
+    assert.equal(await git(path, "show", ":a.txt"), "two\n");
     await writeFile(join(path, "a.txt"), "three\n"); await git(path, "add", "a.txt");
     assert.equal(await git(path, "show", ":a.txt"), "three\n");
     await git(path, "restore", "--staged", "a.txt");

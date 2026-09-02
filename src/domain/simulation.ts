@@ -20,10 +20,11 @@ export type SimulationEvent =
   | { readonly kind: "stagingReflected"; readonly path: string; readonly source: "unstaged" | "untracked" }
   | { readonly kind: "stagingUpdated"; readonly path: string }
   | { readonly kind: "stagingRemoved"; readonly path: string; readonly workingTreeRetained: true }
-  | { readonly kind: "stagingCleared" }
+  | { readonly kind: "stagedChangesCleared" }
   | { readonly kind: "commitCreated"; readonly commit: PredictedCommit }
   | { readonly kind: "branchPointerMoved"; readonly branchName: string; readonly target: PredictedCommit | { readonly kind: "existingCommit"; readonly id: string } }
   | { readonly kind: "headSymbolicRefChanged"; readonly branchName: string }
+  | { readonly kind: "headBranchRelationRetained"; readonly branchName: string }
   | { readonly kind: "headDetachedMoved"; readonly target: PredictedCommit }
   | { readonly kind: "branchCreated"; readonly branchName: string; readonly target: { readonly kind: "existingCommit"; readonly id: string } }
   | { readonly kind: "unbornSymbolicBranchChanged"; readonly branchName: string }
@@ -38,6 +39,7 @@ interface SimulationBase {
   readonly warnings: readonly SimulationNote[];
   readonly assumptions: readonly SimulationNote[];
   readonly unknowns: readonly SimulationNote[];
+  readonly risk: "normal" | "caution";
 }
 
 export interface SupportedSimulation extends SimulationBase {

@@ -27,6 +27,7 @@ test("add updates an existing staged path, leaves staged-only as no-op, and make
   assert.deepEqual(simulateBasicGitCommand(input, command({ kind: "add", target: { kind: "paths", paths: ["only.txt"] } })).events, [{ kind: "noOp" }]);
   const unknown = simulateBasicGitCommand(input, command({ kind: "add", target: { kind: "paths", paths: ["src", "*.ts"] } }));
   assert.deepEqual(unknown.unknowns, [{ code: "unknownPathScope", path: "src" }, { code: "unknownPathScope", path: "*.ts" }]);
+  assert.deepEqual(unknown.events, []);
 });
 
 test("conflict add remains unknown while root add retains ordinary predictions", () => {
@@ -36,6 +37,7 @@ test("conflict add remains unknown while root add retains ordinary predictions",
   assert.deepEqual(result.unknowns, [{ code: "conflictResolutionNotModeled", path: "conflict.txt" }]);
   const conflict = simulateBasicGitCommand(input, command({ kind: "add", target: { kind: "paths", paths: ["conflict.txt"] } }));
   assert.deepEqual(conflict.unknowns, [{ code: "conflictResolutionNotModeled", path: "conflict.txt" }]);
+  assert.deepEqual(conflict.events, []);
 });
 
 test("unstage removes staging but retains Working Tree and distinguishes reset from restore uncertainty", () => {
@@ -46,14 +48,22 @@ test("unstage removes staging but retains Working Tree and distinguishes reset f
   assert.deepEqual(reset.events, [{ kind: "noOp" }]);
   const unknown = simulateBasicGitCommand(input, command({ kind: "unstage", syntax: "restoreStaged", paths: ["new.txt"] }));
   assert.deepEqual(unknown.unknowns, [{ code: "unknownPathScope", path: "new.txt" }]);
+  assert.deepEqual(unknown.events, []);
+});
+
+test("add updates an existing staged snapshot when an untracked replacement has the same path", () => {
+  const input = state({ workingTree: { staged: [{ path: "a.txt", kind: "deleted" }], unstaged: [], untracked: ["a.txt"], conflicts: [] } });
+  const result = simulateBasicGitCommand(input, command({ kind: "add", target: { kind: "paths", paths: ["a.txt"] } }));
+  assert.deepEqual(result.events, [{ kind: "stagingUpdated", path: "a.txt" }]);
 });
 
 test("commit separates predicted commit and pointer movement and never invents a hash", () => {
   const input = state({ workingTree: { staged: [{ path: "a.txt", kind: "modified" }], unstaged: [{ path: "a.txt", kind: "modified" }], untracked: ["later.txt"], conflicts: [] } });
   const result = simulateBasicGitCommand(input, command({ kind: "commit", message: "save" }));
   assert.equal(result.kind, "supported");
-  assert.deepEqual(result.events.slice(0, 3).map((event) => event.kind), ["stagingCleared", "commitCreated", "branchPointerMoved"]);
-  assert.deepEqual(result.events[1], { kind: "commitCreated", commit: { kind: "newCommit", parentCommitIds: [id] } });
+  assert.deepEqual(result.events.slice(0, 4).map((event) => event.kind), ["commitCreated", "branchPointerMoved", "headBranchRelationRetained", "stagedChangesCleared"]);
+  assert.deepEqual(result.events[0], { kind: "commitCreated", commit: { kind: "newCommit", parentCommitIds: [id] } });
+  assert.equal(result.events.some((event) => event.kind === "headSymbolicRefChanged"), false);
   assert.equal(JSON.stringify(result).includes("shortId"), false);
   assert.equal(JSON.stringify(result).includes("subject"), false);
 });
@@ -64,19 +74,37 @@ test("commit blocks invalid states and models detached and unborn parents", () =
   assert.equal(simulateBasicGitCommand(state({ workingTree: { staged: [{ path: "a", kind: "modified" }], unstaged: [], untracked: [], conflicts: [] } }), command({ kind: "commit", message: "" })).kind, "blocked");
   const unborn = state({ currentLocation: { kind: "unborn", branchName: "main", head: null, detached: false }, history: [], localBranches: [], workingTree: { staged: [{ path: "a", kind: "added" }], unstaged: [], untracked: [], conflicts: [] } });
   const result = simulateBasicGitCommand(unborn, command({ kind: "commit" }));
-  assert.deepEqual(result.events[1], { kind: "commitCreated", commit: { kind: "newCommit", parentCommitIds: [] } });
+  assert.deepEqual(result.events[0], { kind: "commitCreated", commit: { kind: "newCommit", parentCommitIds: [] } });
+  assert.equal(result.events.some((event) => event.kind === "headSymbolicRefChanged"), false);
   assert.deepEqual(result.assumptions, [{ code: "interactiveCommitMessageRequired" }]);
+  const detached = state({ currentLocation: { kind: "detached", branchName: null, head: { id, shortId: id.slice(0, 7), subject: "root" }, detached: true }, workingTree: { staged: [{ path: "a", kind: "modified" }], unstaged: [], untracked: [], conflicts: [] } });
+  const detachedResult = simulateBasicGitCommand(detached, command({ kind: "commit", message: "save" }));
+  assert.deepEqual(detachedResult.events.slice(0, 2).map((event) => event.kind), ["commitCreated", "headDetachedMoved"]);
+  assert.equal(detachedResult.events.some((event) => event.kind === "branchPointerMoved" || event.kind === "headSymbolicRefChanged"), false);
 });
 
 test("switch respects known local branches, dirty uncertainty, and switch -c unborn semantics", () => {
   const dirty = state({ workingTree: { staged: [], unstaged: [{ path: "a", kind: "modified" }], untracked: [], conflicts: [] } });
   const existing = simulateBasicGitCommand(dirty, command({ kind: "switch", branchName: "feature", create: false }));
-  assert.equal(existing.kind, "supported"); assert.deepEqual(existing.warnings, [{ code: "dirtySwitchMayFail" }]);
+  assert.equal(existing.kind, "supported"); assert.deepEqual(existing.warnings, [{ code: "dirtySwitchMayFail" }]); assert.equal(existing.risk, "caution");
   assert.equal(simulateBasicGitCommand(state(), command({ kind: "switch", branchName: "missing", create: false })).kind, "unsupported");
   const unborn = state({ currentLocation: { kind: "unborn", branchName: "main", head: null, detached: false }, localBranches: [], history: [] });
   const created = simulateBasicGitCommand(unborn, command({ kind: "switch", branchName: "feature", create: true }));
-  assert.deepEqual(created.events, [{ kind: "unbornSymbolicBranchChanged", branchName: "feature" }]);
+  assert.deepEqual(created.events, [{ kind: "unbornSymbolicBranchChanged", branchName: "feature" }, { kind: "derivedRelationInvalidated", relation: "upstream" }]);
   assert.equal(JSON.stringify(created).includes("newCommit"), false);
+});
+
+test("switch invalidates only derived relations made stale by the target branch", () => {
+  const different = simulateBasicGitCommand(state(), command({ kind: "switch", branchName: "feature", create: false }));
+  assert.deepEqual(different.events.slice(1), [{ kind: "derivedRelationInvalidated", relation: "upstream" }, { kind: "derivedRelationInvalidated", relation: "comparison" }]);
+  const sameTipState = state({ localBranches: [{ name: "main", tipCommitId: id }, { name: "same-tip", tipCommitId: id }] });
+  const sameTip = simulateBasicGitCommand(sameTipState, command({ kind: "switch", branchName: "same-tip", create: false }));
+  assert.deepEqual(sameTip.events, [{ kind: "headSymbolicRefChanged", branchName: "same-tip" }, { kind: "derivedRelationInvalidated", relation: "upstream" }]);
+  const sameBranch = simulateBasicGitCommand(state(), command({ kind: "switch", branchName: "main", create: false }));
+  assert.deepEqual(sameBranch.events, [{ kind: "noOp" }]);
+  const created = simulateBasicGitCommand(state(), command({ kind: "switch", branchName: "new", create: true }));
+  assert.equal(created.risk, "normal");
+  assert.deepEqual(created.events.at(-1), { kind: "derivedRelationInvalidated", relation: "upstream" });
 });
 
 test("non-normal and later commands are explicitly unsupported", () => {
