@@ -1,5 +1,16 @@
 import type { SelectionState } from "../domain/appViewState";
 
+export type GitMapMessage = { readonly type: "select"; readonly selection: SelectionState } | { readonly type: "detailInspect" | "detailCommand" | "recalculate" | "clear" } | { readonly type: "analyze"; readonly input: string } | { readonly type: "selectHistory"; readonly index: number };
+
+export function parseGitMapMessage(value: unknown): GitMapMessage | undefined {
+  const selection = parseGitMapSelectionMessage(value); if (selection) return { type: "select", selection };
+  if (!isRecord(value) || !isString(value.type)) return undefined;
+  if ((value.type === "detailInspect" || value.type === "detailCommand" || value.type === "recalculate" || value.type === "clear") && hasOnly(value, ["type"])) return { type: value.type };
+  if (value.type === "analyze" && isString(value.input) && value.input.length <= 4096 && hasOnly(value, ["type", "input"])) return { type: "analyze", input: value.input };
+  if (value.type === "selectHistory" && typeof value.index === "number" && Number.isInteger(value.index) && value.index >= 0 && hasOnly(value, ["type", "index"])) return { type: "selectHistory", index: value.index };
+  return undefined;
+}
+
 export function parseGitMapSelectionMessage(value: unknown): SelectionState | undefined {
   if (!isRecord(value) || value.type !== "select" || !isRecord(value.selection)) return undefined;
   const selection = value.selection;

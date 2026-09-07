@@ -3,10 +3,11 @@ import { createSidebarPresentation, type SidebarNode } from "./sidebarPresentati
 import { RepositoryStateSnapshotStore } from "./repositoryStateSnapshot";
 import { AppViewStateStore } from "../domain/appViewStateStore";
 import type { SelectionState } from "../domain/appViewState";
+import type { CommandPreviewSession } from "./commandPreview";
 
 export const GIT_BEARINGS_SIDEBAR_VIEW_ID = "gitBearings.sidebar";
 
-export function createGitBearingsSidebar(snapshotStore: RepositoryStateSnapshotStore, viewState: AppViewStateStore<unknown>): vscode.Disposable {
+export function createGitBearingsSidebar(snapshotStore: RepositoryStateSnapshotStore, viewState: AppViewStateStore<CommandPreviewSession>): vscode.Disposable {
   const provider = new GitBearingsSidebarProvider(snapshotStore, viewState);
   const treeView = vscode.window.createTreeView(GIT_BEARINGS_SIDEBAR_VIEW_ID, { treeDataProvider: provider });
   const selectionSubscription = viewState.onDidChange((state) => {

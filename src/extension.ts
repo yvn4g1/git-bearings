@@ -21,6 +21,7 @@ import { RepositoryStateSnapshotStore } from "./ui/repositoryStateSnapshot";
 import { RepositoryStateRefreshController } from "./repository/repositoryStateRefreshController";
 import { CommitDetailReader } from "./git/commitDetailReader";
 import { CommitDetailController } from "./ui/commitDetailController";
+import type { CommandPreviewSession } from "./ui/commandPreview";
 
 const selectedRepositoryKey = "gitBearings.selectedRepository";
 
@@ -29,7 +30,7 @@ interface GitExtensionExports { getAPI(version: 1): GitApiLike; }
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const outputChannel = vscode.window.createOutputChannel("Git Bearings");
   const snapshotStore = new RepositoryStateSnapshotStore();
-  const appViewState = new AppViewStateStore<unknown>();
+  const appViewState = new AppViewStateStore<CommandPreviewSession>();
   const basePreference = new BasePreferenceController({
     read: () => context.workspaceState.get<unknown>(BASE_PREFERENCE_KEY),
     write: (value) => context.workspaceState.update(BASE_PREFERENCE_KEY, value),

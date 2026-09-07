@@ -11,7 +11,7 @@ export interface CommitGraphNode {
   readonly roles: readonly CommitGraphRole[];
   readonly visualState?: "selected" | "related";
 }
-export interface PredictionCommit { readonly label: "Prediction"; readonly description: "NEW COMMIT"; readonly x: number; readonly y: number; readonly visualState?: "selected" | "related"; }
+export interface PredictionCommit { readonly label: "Prediction"; readonly description: string; readonly x: number; readonly y: number; readonly visualState?: "selected" | "related"; }
 
 export interface CommitGraphEdge {
   readonly parentCommitId: string;

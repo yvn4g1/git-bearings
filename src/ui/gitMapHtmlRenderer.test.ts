@@ -74,6 +74,13 @@ test("Remote unavailable uses Unknown grammar while missing Remote remains a fac
   assert.ok(missing.includes("Remote は設定されていません")); assert.ok(!missing.includes('class="unknown-state">'));
 });
 
+test("Command Preview stays outside Detail, escapes input, and offers analysis only", () => {
+  const map = { events: ["◌ NEW MERGE COMMITを生成", "STEP 1 fetch", "STEP 2 integrate (rebase)"], predictions: [{ label: "Prediction", description: "NEW MERGE COMMIT" }], remoteSteps: ["STEP 1 fetch", "STEP 2 integrate (rebase)"], unknown: ["? fetchedTipUnknown"] };
+  const commandPreview = { active: { rawInput: 'git commit -m "<unsafe>"', repositoryRoot: "/repo", basedOnStateVersion: 1, parse: { kind: "parseFailure" as const, reason: "<unsafe>" } }, stale: false, banner: true, status: "parseFailure" as const, sections: ["一言で何する", "今のあなたの場合", "変わるもの", "変わらないもの", "Git Map Preview", "注意・前提"].map((title) => ({ title: title as "一言で何する", lines: ["<unsafe>"] })), map, history: [{ label: "<unsafe>", stale: false }], examples: ["git add ."] };
+  const html = renderGitMapHtml({ ...presentation(), detailMode: "commandInput", commandPreview }, "nonce");
+  assert.ok(html.includes("PREVIEW")); assert.ok(html.includes("Repositoryは変更されていません")); assert.ok(html.includes("NEW MERGE COMMIT")); assert.ok(html.includes("STEP 1 fetch")); assert.ok(html.includes("data-command-input")); assert.ok(html.includes("Analyze")); assert.ok(html.includes("&lt;unsafe&gt;")); assert.ok(!html.includes("Execute")); assert.ok(!html.includes("Run"));
+});
+
 function presentation(): GitMapPresentation {
   const snapshot = { kind: "empty" as const };
   return { status: "available", repository: `<script>`, operationBanner: `<img src=x>`, workingTree: { kind: "clean", unstagedCount: 0, modifiedCount: 0, untrackedCount: 0, conflictsCount: 0 }, staging: { stagedCount: 0 }, stash: { kind: "shelf", count: 1 }, graph: { kind: "graph", nodes: [{ commitId: "id", shortId: "abc", subject: `<script>`, x: 20, y: 80, roles: ["current", "base", "mergeBase"], visualState: "related" }], edges: [], omissions: [], localBranches: [], remoteTrackingRefs: [], predictionCommits: [{ label: "Prediction", description: "NEW COMMIT", x: 50, y: 80, visualState: "selected" }], width: 200, height: 120 }, remotes: [{ name: `<img src=x>`, facts: [], liveRemote: { label: "live Remote", message: "未確認" } }], upstream: [], detailSnapshot: snapshot };

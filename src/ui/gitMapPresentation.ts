@@ -1,9 +1,10 @@
 import type { RepositoryState } from "../domain/repositoryState";
-import type { SelectionState } from "../domain/appViewState";
+import type { DetailMode, SelectionState } from "../domain/appViewState";
 import { createCommitGraphPresentation, type CommitGraphPresentation } from "./commitGraphPresentation";
 import type { RepositoryStateSnapshot } from "./repositoryStateSnapshot";
 import { createExplanationPresentation, type ExplanationPresentation } from "./explanationPresentation";
 import type { CommitDetailState } from "../domain/commitDetail";
+import type { CommandPreviewPresentation } from "./commandPreview";
 
 export interface GitMapItem { readonly label: string; readonly value: string; }
 export interface WorkingTreePresentation { readonly kind: "clean" | "changes"; readonly unstagedCount: number; readonly modifiedCount: number; readonly untrackedCount: number; readonly conflictsCount: number; readonly visualState?: "selected" | "related"; }
@@ -33,9 +34,11 @@ export interface GitMapPresentation {
   readonly explanation?: ExplanationPresentation;
   readonly commitDetail?: CommitDetailState;
   readonly upstreamVisualState?: "selected" | "related";
+  readonly commandPreview?: CommandPreviewPresentation;
+  readonly detailMode?: DetailMode;
 }
 
-export function createGitMapPresentation(snapshot: RepositoryStateSnapshot, selection: SelectionState = { kind: "overview" }, commitDetail: CommitDetailState = { kind: "idle" }): GitMapPresentation {
+export function createGitMapPresentation(snapshot: RepositoryStateSnapshot, selection: SelectionState = { kind: "overview" }, commitDetail: CommitDetailState = { kind: "idle" }, commandPreview?: CommandPreviewPresentation, detailMode: DetailMode = "inspect"): GitMapPresentation {
   if (snapshot.kind === "empty") return unavailable(snapshot, "Git状態をまだ読み取っていません");
   if (snapshot.kind === "loading") return unavailable(snapshot, "Git状態を読み取り中…");
   if (snapshot.kind === "unavailable") return unavailable(snapshot, "Git状態を安全に取得できません", snapshot.reason);
@@ -44,9 +47,11 @@ export function createGitMapPresentation(snapshot: RepositoryStateSnapshot, sele
   return {
     status: "available", repository: state.repository.rootPath, operationBanner: operationBanner(state),
     workingTree: { kind: workingTree.unstaged.length || workingTree.untracked.length || workingTree.conflicts.length ? "changes" : "clean", unstagedCount: workingTree.unstaged.length, modifiedCount: workingTree.unstaged.filter((change) => change.kind === "modified").length, untrackedCount: workingTree.untracked.length, conflictsCount: workingTree.conflicts.length, ...(selection.kind === "workingTree" ? { visualState: "selected" as const } : {}) },
-    staging: { stagedCount: workingTree.staged.length, ...(selection.kind === "staging" ? { visualState: "selected" as const } : {}) }, stash: selectedStash(stashPresentation(state), selection), graph: selectedGraph(createCommitGraphPresentation(state), state, selection), ...remoteFacts(state, selection), detailSnapshot: snapshot, selection, detailIdentity: selectionIdentity(selection), explanation: createExplanationPresentation(state, selection), ...(selection.kind === "commit" ? { commitDetail } : {}), ...(selection.kind === "upstream" ? { upstreamVisualState: "selected" as const } : {}),
+    staging: { stagedCount: workingTree.staged.length, ...(selection.kind === "staging" ? { visualState: "selected" as const } : {}) }, stash: selectedStash(stashPresentation(state), selection), graph: previewGraph(selectedGraph(createCommitGraphPresentation(state), state, selection), commandPreview), ...remoteFacts(state, selection), detailSnapshot: snapshot, selection, detailIdentity: selectionIdentity(selection), explanation: createExplanationPresentation(state, selection), ...(selection.kind === "commit" ? { commitDetail } : {}), ...(selection.kind === "upstream" ? { upstreamVisualState: "selected" as const } : {}), ...(commandPreview ? { commandPreview } : {}), detailMode,
   };
 }
+
+function previewGraph(graph: CommitGraphPresentation, preview: CommandPreviewPresentation | undefined): CommitGraphPresentation { return preview?.map && graph.kind === "graph" ? { ...graph, predictionCommits: preview.map.predictions.map((item, index) => ({ label: "Prediction" as const, description: item.description, x: graph.width - 120, y: 48 + index * 34, visualState: "related" as const })) } : graph; }
 
 function unavailable(snapshot: Exclude<RepositoryStateSnapshot, { kind: "available" }>, message: string, reason?: string): GitMapPresentation {
   return { status: snapshot.kind, repository: snapshot.kind === "empty" ? undefined : snapshot.rootPath, message, unavailableReason: reason, workingTree: { kind: "clean", unstagedCount: 0, modifiedCount: 0, untrackedCount: 0, conflictsCount: 0 }, staging: { stagedCount: 0 }, stash: { kind: "none" }, graph: { kind: "empty", nodes: [], edges: [], omissions: [], localBranches: [], remoteTrackingRefs: [], predictionCommits: [], width: 0, height: 0 }, remotes: [], upstream: [], detailSnapshot: snapshot, selection: { kind: "overview" }, detailIdentity: "Overview" };
