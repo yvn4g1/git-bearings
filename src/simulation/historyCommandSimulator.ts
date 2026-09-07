@@ -37,7 +37,7 @@ function rebase(state: RepositoryState, command: Extract<GitCommand, { kind: "re
   const target = resolveTarget(state, command.upstream);
   if (!target) return unknownTarget(base, command.upstream);
   const relation = relationFor(state, target);
-  if (relation === "same" || relation === "currentContainsTarget") return { ...base, kind: "supported", events: [{ kind: "noOp" }] };
+  if (relation === "same" || relation === "currentContainsTarget") return withDirtyRebaseWarning(state, { ...base, kind: "supported", events: [{ kind: "noOp" }] });
   if (relation === "currentAncestorOfTarget") return withDirtyRebaseWarning(state, pointerMove(state, base, target.tipCommitId));
   const replay = replayRange(state, target);
   if (replay.kind === "unsupported") return { ...base, kind: "unsupported", reason: "mergeCommitRebaseNotModeled" };
@@ -78,8 +78,8 @@ function relationFor(state: RepositoryState, target: KnownTarget): Relation {
   if (currentId === target.tipCommitId) return "same";
   const counts = comparisonCounts(state, target);
   if (counts) return counts.ahead === 0 && counts.behind === 0 ? "same" : counts.ahead > 0 && counts.behind === 0 ? "currentContainsTarget" : counts.ahead === 0 && counts.behind > 0 ? "currentAncestorOfTarget" : counts.ahead > 0 && counts.behind > 0 ? "diverged" : "unknown";
-  if (hasPath(state.history, target.tipCommitId, currentId)) return "currentContainsTarget";
-  if (hasPath(state.history, currentId, target.tipCommitId)) return "currentAncestorOfTarget";
+  if (hasPath(state.history, target.tipCommitId, currentId)) return "currentAncestorOfTarget";
+  if (hasPath(state.history, currentId, target.tipCommitId)) return "currentContainsTarget";
   return "unknown";
 }
 
@@ -111,5 +111,10 @@ function pointerMove(state: RepositoryState, base: Base, targetId: string): Simu
 function moveToPredicted(state: RepositoryState, target: PredictedCommit): SimulationEvent[] { return state.currentLocation.kind === "detached" ? [{ kind: "headDetachedMoved", target }] : [{ kind: "branchPointerMoved", branchName: state.currentLocation.branchName, target }, { kind: "headBranchRelationRetained", branchName: state.currentLocation.branchName }]; }
 function unknownTarget(base: Base, operand: string): SimulationResult { return { ...base, kind: "supported", unknowns: [{ code: "targetResolutionUnknown", operand }] }; }
 function dirty(state: RepositoryState): boolean { return state.workingTree.staged.length + state.workingTree.unstaged.length + state.workingTree.untracked.length > 0; }
-function withDirtyMergeWarning(state: RepositoryState, result: SimulationResult): SimulationResult { return dirty(state) && result.kind === "supported" && !result.events.some((event) => event.kind === "noOp") ? { ...result, risk: "caution", warnings: [...result.warnings, { code: "dirtyMergeMayFail" }], unknowns: [...result.unknowns, { code: "futureWorkingTreeAndIndexUnknown" }] } : result; }
-function withDirtyRebaseWarning(state: RepositoryState, result: SimulationResult): SimulationResult { return dirty(state) && result.kind === "supported" && !result.events.some((event) => event.kind === "noOp") ? { ...result, risk: "caution", warnings: [...result.warnings, { code: "dirtyRebaseMayBeRejected" }], unknowns: [...result.unknowns, { code: "futureWorkingTreeAndIndexUnknown" }] } : result; }
+function withDirtyMergeWarning(state: RepositoryState, result: SimulationResult): SimulationResult { return dirty(state) && result.kind === "supported" && !result.events.some((event) => event.kind === "noOp") ? { ...result, risk: "caution", warnings: appendNote(result.warnings, { code: "dirtyMergeMayFail" }), unknowns: appendNote(result.unknowns, { code: "futureWorkingTreeAndIndexUnknown" }) } : result; }
+function withDirtyRebaseWarning(state: RepositoryState, result: SimulationResult): SimulationResult {
+  if (!dirty(state) || result.kind !== "supported") return result;
+  const noOp = result.events.some((event) => event.kind === "noOp");
+  return { ...result, risk: "caution", warnings: appendNote(result.warnings, { code: "dirtyRebaseMayBeRejected" }), unknowns: noOp ? result.unknowns : appendNote(result.unknowns, { code: "futureWorkingTreeAndIndexUnknown" }) };
+}
+function appendNote(notes: readonly SimulationNote[], note: SimulationNote): readonly SimulationNote[] { return notes.some((item) => item.code === note.code) ? notes : [...notes, note]; }

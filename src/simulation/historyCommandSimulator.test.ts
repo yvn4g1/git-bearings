@@ -43,6 +43,17 @@ test("bounded history only gives positive ancestry proofs, and merge keeps confl
   assert.equal(simulateGitCommand(state({ operation: { kind: "merge" } }), command({ kind: "merge", branch: "feature" })).kind, "unsupported");
 });
 
+test("bounded parent paths keep fast-forward and up-to-date directions without comparison or upstream", () => {
+  const fastForwardState = state({ comparison: { kind: "notConfigured" }, upstream: { kind: "notConfigured" }, history: [{ commit: ref(ids.target), parentIds: [ids.current] }, { commit: ref(ids.current), parentIds: [ids.base] }, { commit: ref(ids.base), parentIds: [] }] });
+  const mergeFastForward = simulateGitCommand(fastForwardState, command({ kind: "merge", branch: "feature" }));
+  assert.equal(mergeFastForward.events.some((event) => event.kind === "commitCreated"), false); assert.deepEqual(mergeFastForward.events[0], { kind: "branchPointerMoved", branchName: "main", target: { kind: "existingCommit", id: ids.target } });
+  const rebaseBehind = simulateGitCommand(fastForwardState, command({ kind: "rebase", upstream: "feature" }));
+  assert.deepEqual(rebaseBehind.events[0], { kind: "branchPointerMoved", branchName: "main", target: { kind: "existingCommit", id: ids.target } });
+  const upToDateState = state({ comparison: { kind: "notConfigured" }, upstream: { kind: "notConfigured" }, history: [{ commit: ref(ids.current), parentIds: [ids.target] }, { commit: ref(ids.target), parentIds: [ids.base] }, { commit: ref(ids.base), parentIds: [] }] });
+  assert.deepEqual(simulateGitCommand(upToDateState, command({ kind: "merge", branch: "feature" })).events, [{ kind: "noOp" }]);
+  assert.deepEqual(simulateGitCommand(upToDateState, command({ kind: "rebase", upstream: "feature" })).events, [{ kind: "noOp" }]);
+});
+
 test("rebase preserves old commits and creates ordered replacement predictions only for a complete linear range", () => {
   const result = simulateGitCommand(state(), command({ kind: "rebase", upstream: "feature" }));
   assert.equal(result.kind, "supported"); assert.deepEqual(result.events.slice(0, 1), [{ kind: "commitCreated", commit: { kind: "rewrittenCommit", originalCommitId: ids.current, basedOn: { kind: "existingCommit", id: ids.target } } }]);
@@ -60,7 +71,10 @@ test("rebase handles already-based, behind-only, unborn, detached, conflicts and
   const behind = simulateGitCommand(state({ comparison: { kind: "available", value: { baseRef: "refs/heads/feature", mergeBase: ref(ids.current), ahead: 0, behind: 1 } } }), command({ kind: "rebase", upstream: "feature" })); assert.equal(behind.events.some((event) => event.kind === "commitCreated"), false);
   assert.equal(simulateGitCommand(state({ currentLocation: { kind: "unborn", branchName: "main", head: null, detached: false }, history: [] }), command({ kind: "rebase", upstream: "feature" })).kind, "blocked");
   const detached = simulateGitCommand(state({ currentLocation: { kind: "detached", branchName: null, head: ref(ids.current), detached: true } }), command({ kind: "rebase", upstream: "feature" })); assert.equal(detached.events.at(-3)?.kind, "headDetachedMoved");
-  const dirty = simulateGitCommand(state({ workingTree: { staged: [], unstaged: [{ path: "a", kind: "modified" }], untracked: [], conflicts: [] } }), command({ kind: "rebase", upstream: "feature" })); assert.equal(dirty.warnings.some((note) => note.code === "dirtyRebaseMayBeRejected"), true); assert.equal(dirty.warnings.some((note) => note.code === "rebaseMayConflict"), true);
+  const dirty = simulateGitCommand(state({ workingTree: { staged: [], unstaged: [{ path: "a", kind: "modified" }], untracked: [], conflicts: [] } }), command({ kind: "rebase", upstream: "feature" })); assert.equal(dirty.warnings.some((note) => note.code === "dirtyRebaseMayBeRejected"), true); assert.equal(dirty.warnings.some((note) => note.code === "rebaseMayConflict"), true); assert.equal(dirty.unknowns.filter((note) => note.code === "futureWorkingTreeAndIndexUnknown").length, 1);
+  const dirtyNoOp = simulateGitCommand(state({ comparison: { kind: "available", value: { baseRef: "refs/heads/feature", mergeBase: ref(ids.target), ahead: 1, behind: 0 } }, workingTree: { staged: [], unstaged: [{ path: "a", kind: "modified" }], untracked: [], conflicts: [] } }), command({ kind: "rebase", upstream: "feature" }));
+  assert.deepEqual(dirtyNoOp.events, [{ kind: "noOp" }]); assert.equal(dirtyNoOp.risk, "caution"); assert.equal(dirtyNoOp.warnings.some((note) => note.code === "dirtyRebaseMayBeRejected"), true); assert.equal(dirtyNoOp.unknowns.some((note) => note.code === "futureWorkingTreeAndIndexUnknown"), false);
+  assert.equal(simulateGitCommand(state({ workingTree: { staged: [], unstaged: [], untracked: [], conflicts: [{ path: "a", kind: "bothModified" }] } }), command({ kind: "rebase", upstream: "feature" })).kind, "blocked");
 });
 
 test("pull is always fetch then integration and never fabricates a fetched tip", () => {
@@ -71,4 +85,12 @@ test("pull is always fetch then integration and never fabricates a fetched tip",
   assert.deepEqual(rebase.events.slice(0, 2), [{ kind: "pullFetchRequested", target: { remote: "upstream", branch: "next" } }, { kind: "pullIntegrationPlanned", method: "rebase" }]);
   assert.equal(rebase.unknowns.some((note) => note.code === "pullIntegrationMethodUnknown"), false);
   assert.equal(simulateGitCommand(state({ workingTree: { staged: [], unstaged: [], untracked: [], conflicts: [{ path: "a", kind: "bothModified" }] } }), command({ kind: "pull", target: { kind: "default" }, rebase: false })).kind, "blocked");
+  assert.equal(simulateGitCommand(state({ operation: { kind: "rebase" } }), command({ kind: "pull", target: { kind: "default" }, rebase: false })).kind, "unsupported");
+});
+
+test("true merge can move detached HEAD and P23 simulations preserve input facts", () => {
+  const input = state({ currentLocation: { kind: "detached", branchName: null, head: ref(ids.current), detached: true }, workingTree: { staged: [], unstaged: [{ path: "a", kind: "modified" }], untracked: [], conflicts: [] } }); const commandInput = command({ kind: "merge", branch: "feature" }); const before = structuredClone(input); const commandBefore = structuredClone(commandInput);
+  const result = simulateGitCommand(input, commandInput);
+  assert.equal(result.events[1]?.kind, "headDetachedMoved"); assert.equal(result.unknowns.filter((note) => note.code === "futureWorkingTreeAndIndexUnknown").length, 1);
+  assert.deepEqual(input, before); assert.deepEqual(commandInput, commandBefore);
 });
