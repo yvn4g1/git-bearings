@@ -6,6 +6,7 @@ export type GitMapMessage = { readonly type: "select"; readonly selection: Selec
 export function parseGitMapMessage(value: unknown): GitMapMessage | undefined {
   const selection = parseGitMapSelectionMessage(value); if (selection) return { type: "select", selection };
   if (!isRecord(value) || !isString(value.type)) return undefined;
+  const goal = /^goalPreview:([A-Za-z]+):([A-Za-z]+)$/.exec(value.type); if (goal && hasOnly(value, ["type"]) && goalId(goal[1]) && goal[2].length <= 64) return { type: "goalPreview", goalId: goal[1], stepId: goal[2] };
   if ((value.type === "detailInspect" || value.type === "detailCommand" || value.type === "detailGoal" || value.type === "recalculate" || value.type === "clear") && hasOnly(value, ["type"])) return { type: value.type };
   if (value.type === "analyze" && isString(value.input) && value.input.length <= 4096 && hasOnly(value, ["type", "input"])) return { type: "analyze", input: value.input };
   if (value.type === "selectHistory" && typeof value.index === "number" && Number.isInteger(value.index) && value.index >= 0 && hasOnly(value, ["type", "index"])) return { type: "selectHistory", index: value.index };
