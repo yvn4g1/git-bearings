@@ -1,13 +1,15 @@
 import type { SelectionState } from "../domain/appViewState";
+import type { GoalId, GoalTarget } from "../domain/goal";
 
-export type GitMapMessage = { readonly type: "select"; readonly selection: SelectionState } | { readonly type: "detailInspect" | "detailCommand" | "recalculate" | "clear" } | { readonly type: "analyze"; readonly input: string } | { readonly type: "selectHistory"; readonly index: number };
+export type GitMapMessage = { readonly type: "select"; readonly selection: SelectionState } | { readonly type: "detailInspect" | "detailCommand" | "detailGoal" | "recalculate" | "clear" } | { readonly type: "analyze"; readonly input: string } | { readonly type: "selectHistory"; readonly index: number } | { readonly type: "goalPreview"; readonly goalId: GoalId; readonly stepId: string; readonly target?: GoalTarget };
 
 export function parseGitMapMessage(value: unknown): GitMapMessage | undefined {
   const selection = parseGitMapSelectionMessage(value); if (selection) return { type: "select", selection };
   if (!isRecord(value) || !isString(value.type)) return undefined;
-  if ((value.type === "detailInspect" || value.type === "detailCommand" || value.type === "recalculate" || value.type === "clear") && hasOnly(value, ["type"])) return { type: value.type };
+  if ((value.type === "detailInspect" || value.type === "detailCommand" || value.type === "detailGoal" || value.type === "recalculate" || value.type === "clear") && hasOnly(value, ["type"])) return { type: value.type };
   if (value.type === "analyze" && isString(value.input) && value.input.length <= 4096 && hasOnly(value, ["type", "input"])) return { type: "analyze", input: value.input };
   if (value.type === "selectHistory" && typeof value.index === "number" && Number.isInteger(value.index) && value.index >= 0 && hasOnly(value, ["type", "index"])) return { type: "selectHistory", index: value.index };
+  if (value.type === "goalPreview" && goalId(value.goalId) && isString(value.stepId) && value.stepId.length <= 64 && target(value.target) && hasOnly(value, value.target === undefined ? ["type", "goalId", "stepId"] : ["type", "goalId", "stepId", "target"])) return { type: "goalPreview", goalId: value.goalId, stepId: value.stepId, ...(value.target === undefined ? {} : { target: value.target }) };
   return undefined;
 }
 
@@ -31,3 +33,5 @@ export function parseGitMapSelectionMessage(value: unknown): SelectionState | un
 function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
 function isString(value: unknown): value is string { return typeof value === "string"; }
 function hasOnly(value: Record<string, unknown>, keys: readonly string[]): boolean { return Object.keys(value).every((key) => keys.includes(key)); }
+function goalId(value: unknown): value is GoalId { return typeof value === "string" && ["stageChanges", "commitChanges", "stashChanges", "pushCommits", "fetchRemote", "pullRemote", "mergeBase", "rebaseBase", "switchBranch", "createBranch", "switchWithWork", "unstageChanges", "restoreStash"].includes(value); }
+function target(value: unknown): value is GoalTarget | undefined { if (value === undefined) return true; if (!isRecord(value) || !isString(value.kind)) return false; if (value.kind === "branch" || value.kind === "newBranch") return isString(value.branchName) && value.branchName.length > 0 && value.branchName.length <= 256 && hasOnly(value, ["kind", "branchName"]); if (value.kind === "remote") return isString(value.remote) && value.remote.length > 0 && value.remote.length <= 256 && hasOnly(value, ["kind", "remote"]); return value.kind === "remoteBranch" && isString(value.remote) && isString(value.branch) && value.remote.length > 0 && value.branch.length > 0 && value.remote.length <= 256 && value.branch.length <= 256 && hasOnly(value, ["kind", "remote", "branch"]); }

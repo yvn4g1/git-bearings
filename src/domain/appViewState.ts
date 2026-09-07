@@ -15,7 +15,7 @@ export type SelectionState =
   | { readonly kind: "stashShelf" }
   | { readonly kind: "stash"; readonly stashCommitId: string };
 
-export type DetailMode = "inspect" | "commandInput";
+export type DetailMode = "inspect" | "commandInput" | "goal";
 
 export interface AppViewState<PreviewPayload = never> {
   readonly selection: SelectionState;

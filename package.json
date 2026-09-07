@@ -57,6 +57,7 @@
     "test:command-simulator": "npm run compile && node --test out/simulation/basicCommandSimulator.test.js out/simulation/basicCommandSimulator.integration.test.js out/simulation/stashRemoteCommandSimulator.test.js out/simulation/stashRemoteCommandSimulator.integration.test.js out/simulation/historyCommandSimulator.test.js out/simulation/historyCommandSimulator.integration.test.js",
     "test:git-map": "npm run compile && node --test out/ui/commitGraphPresentation.test.js out/ui/gitMapPresentation.test.js out/ui/gitMapHtmlRenderer.test.js out/ui/gitMapMessage.test.js",
     "test:command-preview": "npm run compile && node --test out/ui/commandPreview.test.js",
+    "test:goal": "npm run compile && node --test out/domain/goal.test.js",
     "test:refresh": "npm run compile && node --test out/repository/repositoryStateRefreshController.test.js",
     "vscode:prepublish": "npm run compile"
   },
