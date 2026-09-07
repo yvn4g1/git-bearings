@@ -28,7 +28,7 @@ test("presentation has six sections, keeps Unknown distinct, and handles stale r
 
 test("overlay preserves P21-P23 semantics without future hashes", () => {
   const commit = createCommandPreviewPresentation({ active: analyzeCommand(state(), 'git commit -m "save"'), history: [] }, state()); assert.equal(commit.map?.predictions[0]?.description, "NEW COMMIT");
-  const pull = createCommandPreviewPresentation({ active: analyzeCommand(state(), "git pull --rebase origin main"), history: [] }, state()); assert.deepEqual(pull.map?.remoteSteps.slice(0, 2), ["STEP 1 fetch", "STEP 2 integrate (rebase)"]);
+  const pull = createCommandPreviewPresentation({ active: analyzeCommand(state(), "git pull --rebase origin main"), history: [] }, state()); assert.deepEqual(pull.map?.remote.slice(0, 2), ["STEP 1 fetch", "STEP 2 integrate (rebase)"]);
   const blocked = createCommandPreviewPresentation({ active: analyzeCommand(state({ workingTree: { staged: [], unstaged: [], untracked: [], conflicts: [{ path: "a", kind: "bothModified" }] } }), 'git commit -m "save"'), history: [] }, state({ workingTree: { staged: [], unstaged: [], untracked: [], conflicts: [{ path: "a", kind: "bothModified" }] } })); assert.equal(blocked.status, "blocked"); assert.equal(blocked.map, null);
   assert.equal(JSON.stringify(commit).includes("shortId"), false);
 });

@@ -11,7 +11,9 @@ export interface CommitGraphNode {
   readonly roles: readonly CommitGraphRole[];
   readonly visualState?: "selected" | "related";
 }
-export interface PredictionCommit { readonly label: "Prediction"; readonly description: string; readonly x: number; readonly y: number; readonly visualState?: "selected" | "related"; }
+export interface PredictionCommit { readonly id: string; readonly label: "Prediction"; readonly description: string; readonly x: number; readonly y: number; readonly visualState?: "selected" | "related"; }
+export interface PredictionEdge { readonly fromX: number; readonly fromY: number; readonly toX: number; readonly toY: number; }
+export interface PredictionPointer { readonly label: string; readonly x: number; readonly y: number; readonly toX: number; readonly toY: number; }
 
 export interface CommitGraphEdge {
   readonly parentCommitId: string;
@@ -43,6 +45,8 @@ export interface CommitGraphPresentation {
   readonly remoteTrackingRefs: readonly GraphRef[];
   readonly head?: GraphHead;
   readonly predictionCommits?: readonly PredictionCommit[];
+  readonly predictionEdges?: readonly PredictionEdge[];
+  readonly predictionPointers?: readonly PredictionPointer[];
 }
 export interface GraphRefBounds { readonly left: number; readonly top: number; readonly width: number; readonly height: number; }
 export interface GraphRefConnector { readonly fromX: number; readonly fromY: number; readonly toX: number; readonly toY: number; }
