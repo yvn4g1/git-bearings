@@ -75,10 +75,11 @@ test("Remote unavailable uses Unknown grammar while missing Remote remains a fac
 });
 
 test("Command Preview stays outside Detail, escapes input, and offers analysis only", () => {
-  const map = { workingTree: ["Working Tree → Staging"], staging: ["Staging ← Working Tree"], stash: [], local: ["◌ NEW MERGE COMMITを生成"], predictions: [{ id: "prediction-1", description: "<NEW MERGE COMMIT>", parentCommitIds: [] }], pointers: [], remote: ["STEP 1 fetch", "STEP 2 integrate (rebase)"], warnings: ["注意が必要です。"], unknowns: ["外部結果は未確定です。"] };
+  const trackingUnknown = "commit後のupstreamとのahead/behindは再確認するまで未確定です。";
+  const map = { workingTree: ["Working Tree → Staging"], staging: ["Staging ← Working Tree"], stash: [], local: ["◌ NEW MERGE COMMITを生成"], predictions: [{ id: "prediction-1", description: "<NEW MERGE COMMIT>", parentCommitIds: [] }], pointers: [], remote: ["STEP 1 fetch", "STEP 2 integrate (rebase)"], warnings: ["注意が必要です。"], unknowns: { workingTree: [], staging: [], stash: [], local: [], remote: [trackingUnknown] } };
   const commandPreview = { active: { rawInput: 'git commit -m "<unsafe>"', repositoryRoot: "/repo", basedOnStateVersion: 1, parse: { kind: "parseFailure" as const, reason: "<unsafe>" } }, stale: false, banner: true, status: "parseFailure" as const, sections: ["一言で何する", "今のあなたの場合", "変わるもの", "変わらないもの", "Git Map Preview", "注意・前提"].map((title) => ({ title: title as "一言で何する", lines: ["<unsafe>"] })), map, history: [{ label: "<unsafe>", stale: false }], examples: ["git add ."] };
   const html = renderGitMapHtml({ ...presentation(), detailMode: "commandInput", commandPreview }, "nonce");
-  assert.ok(html.includes("PREVIEW")); assert.ok(html.includes("Repositoryは変更されていません")); assert.ok(html.includes("STEP 1 fetch")); assert.ok(html.includes("warning-state")); assert.ok(html.includes("unknown-state")); assert.ok(html.includes("data-command-input")); assert.ok(html.includes("Analyze")); assert.ok(html.includes("&lt;unsafe&gt;")); assert.ok(!html.includes("Execute")); assert.ok(!html.includes("Run"));
+  assert.ok(html.includes("PREVIEW")); assert.ok(html.includes("Repositoryは変更されていません")); assert.ok(html.includes("STEP 1 fetch")); assert.ok(html.includes("warning-state")); assert.ok(html.includes("unknown-state")); assert.equal((html.match(new RegExp(trackingUnknown, "g")) ?? []).length, 1); assert.ok(html.indexOf("<h2>REMOTE</h2>") < html.indexOf(trackingUnknown)); assert.ok(html.includes("data-command-input")); assert.ok(html.includes("Analyze")); assert.ok(html.includes("&lt;unsafe&gt;")); assert.ok(!html.includes("Execute")); assert.ok(!html.includes("Run"));
 });
 
 function presentation(): GitMapPresentation {

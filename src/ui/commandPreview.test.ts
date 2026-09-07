@@ -34,6 +34,17 @@ test("overlay preserves P21-P23 semantics without future hashes", () => {
   assert.equal(JSON.stringify(commit).includes("shortId"), false);
 });
 
+test("future tracking Unknown is localized to the Remote overlay", () => {
+  const facts = state({ upstream: { kind: "available", value: { remoteName: "origin", branchName: "main", trackingRef: "refs/remotes/origin/main", relation: { kind: "available", value: { ahead: 0, behind: 0 } } } } });
+  const preview = createCommandPreviewPresentation({ active: analyzeCommand(facts, 'git commit -m "save"'), history: [] }, facts);
+  const text = "commit後のupstreamとのahead/behindは再確認するまで未確定です。";
+  assert.deepEqual(preview.map?.unknowns.remote, [text]);
+  assert.deepEqual(preview.map?.unknowns.workingTree, []);
+  assert.deepEqual(preview.map?.unknowns.staging, []);
+  assert.deepEqual(preview.map?.unknowns.stash, []);
+  assert.deepEqual(preview.map?.unknowns.local, []);
+});
+
 test("commit prediction is placed right of factual refs with separate predicted branch and HEAD", () => {
   const facts = state(); const preview = createCommandPreviewPresentation({ active: analyzeCommand(facts, 'git commit -m "save"'), history: [] }, facts); const map = createGitMapPresentation({ kind: "available", repositoryId: "repo", state: facts }, { kind: "overview" }, { kind: "idle" }, preview);
   if (map.graph.kind !== "graph") throw new Error("graph expected"); const predicted = map.graph.predictionCommits?.[0]; const factRight = Math.max(...map.graph.localBranches.map((ref) => ref.bounds.left + ref.bounds.width));
