@@ -13,7 +13,7 @@ export interface CommitGraphNode {
 }
 export interface PredictionCommit { readonly id: string; readonly label: "Prediction"; readonly description: string; readonly x: number; readonly y: number; readonly visualState?: "selected" | "related"; }
 export interface PredictionEdge { readonly fromX: number; readonly fromY: number; readonly toX: number; readonly toY: number; }
-export interface PredictionPointer { readonly label: string; readonly x: number; readonly y: number; readonly toX: number; readonly toY: number; }
+export interface PredictionPointer { readonly kind: "branch" | "head"; readonly label: string; readonly x: number; readonly y: number; readonly toX: number; readonly toY: number; }
 
 export interface CommitGraphEdge {
   readonly parentCommitId: string;

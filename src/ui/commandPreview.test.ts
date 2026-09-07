@@ -3,6 +3,7 @@ import test from "node:test";
 import { AppViewStateStore } from "../domain/appViewStateStore";
 import type { RepositoryState } from "../domain/repositoryState";
 import { CommandPreviewController, addAnalysis, analyzeCommand, createCommandPreviewPresentation, emptyCommandPreviewSession, previewIsStale } from "./commandPreview";
+import { createGitMapPresentation } from "./gitMapPresentation";
 
 const id = "a".repeat(40);
 function state(overrides: Partial<RepositoryState> = {}): RepositoryState { const head = { id, shortId: id.slice(0, 7), subject: "root" }; return { repository: { rootPath: "/repo" }, currentLocation: { kind: "branch", branchName: "main", head, detached: false }, localBranches: [{ name: "main", tipCommitId: id }, { name: "feature", tipCommitId: "b".repeat(40) }], workingTree: { staged: [{ path: "a", kind: "modified" }], unstaged: [], untracked: [], conflicts: [] }, history: [{ commit: head, parentIds: [] }], operation: { kind: "normal" }, remotes: { kind: "notConfigured" }, upstream: { kind: "notConfigured" }, stash: { kind: "available", value: [] }, comparison: { kind: "notConfigured" }, stateVersion: 4, refreshedAt: new Date(0), ...overrides }; }
@@ -31,4 +32,10 @@ test("overlay preserves P21-P23 semantics without future hashes", () => {
   const pull = createCommandPreviewPresentation({ active: analyzeCommand(state(), "git pull --rebase origin main"), history: [] }, state()); assert.deepEqual(pull.map?.remote.slice(0, 2), ["STEP 1 fetch", "STEP 2 integrate (rebase)"]);
   const blocked = createCommandPreviewPresentation({ active: analyzeCommand(state({ workingTree: { staged: [], unstaged: [], untracked: [], conflicts: [{ path: "a", kind: "bothModified" }] } }), 'git commit -m "save"'), history: [] }, state({ workingTree: { staged: [], unstaged: [], untracked: [], conflicts: [{ path: "a", kind: "bothModified" }] } })); assert.equal(blocked.status, "blocked"); assert.equal(blocked.map, null);
   assert.equal(JSON.stringify(commit).includes("shortId"), false);
+});
+
+test("commit prediction is placed right of factual refs with separate predicted branch and HEAD", () => {
+  const facts = state(); const preview = createCommandPreviewPresentation({ active: analyzeCommand(facts, 'git commit -m "save"'), history: [] }, facts); const map = createGitMapPresentation({ kind: "available", repositoryId: "repo", state: facts }, { kind: "overview" }, { kind: "idle" }, preview);
+  if (map.graph.kind !== "graph") throw new Error("graph expected"); const predicted = map.graph.predictionCommits?.[0]; const factRight = Math.max(...map.graph.localBranches.map((ref) => ref.bounds.left + ref.bounds.width));
+  assert.ok(predicted && predicted.x > factRight); assert.equal(map.graph.predictionPointers?.some((item) => item.kind === "branch"), true); assert.ok((map.graph.predictionPointers?.find((item) => item.kind === "branch")?.y ?? 0) < (predicted?.y ?? 0));
 });
