@@ -15,16 +15,40 @@ export type SimulationNote =
   | { readonly code: "liveRemoteStateUnknown" }
   | { readonly code: "pushMayBeRejected" }
   | { readonly code: "lastFetchedPushRelationMayReject"; readonly ahead: number; readonly behind: number }
-  | { readonly code: "defaultTargetUnknown"; readonly operation: "fetch" | "push" }
+  | { readonly code: "defaultTargetUnknown"; readonly operation: "fetch" | "push" | "pull" }
   | { readonly code: "pushSourceUnknown"; readonly branchName: string }
   | { readonly code: "upstreamConfigurationUnknown"; readonly remoteName: string; readonly branchName: string }
   | { readonly code: "stashApplyDoesNotGuaranteeStagedness" }
-  | { readonly code: "uncommittedChangesNotPushed" };
+  | { readonly code: "uncommittedChangesNotPushed" }
+  | { readonly code: "targetResolutionUnknown"; readonly operand: string }
+  | { readonly code: "historyRelationUnknown" }
+  | { readonly code: "mergeMayConflict" }
+  | { readonly code: "rebaseMayConflict" }
+  | { readonly code: "dirtyMergeMayFail" }
+  | { readonly code: "dirtyRebaseMayBeRejected" }
+  | { readonly code: "rebaseReplayRangeUnknown" }
+  | { readonly code: "fetchedTipUnknown" }
+  | { readonly code: "pullIntegrationMethodUnknown" }
+  | { readonly code: "pullIntegrationOutcomeUnknown" }
+  | { readonly code: "pullMayConflict" };
 
-export interface PredictedCommit {
+export interface NewCommit {
   readonly kind: "newCommit";
   readonly parentCommitIds: readonly string[];
 }
+
+export interface NewMergeCommit {
+  readonly kind: "newMergeCommit";
+  readonly parentCommitIds: readonly [string, string];
+}
+
+export interface RewrittenCommit {
+  readonly kind: "rewrittenCommit";
+  readonly originalCommitId: string;
+  readonly basedOn: { readonly kind: "existingCommit"; readonly id: string } | { readonly kind: "previousRewrittenCommit"; readonly originalCommitId: string };
+}
+
+export type PredictedCommit = NewCommit | NewMergeCommit | RewrittenCommit;
 
 export type SimulationEvent =
   | { readonly kind: "stagingReflected"; readonly path: string; readonly source: "unstaged" | "untracked" }
@@ -35,7 +59,7 @@ export type SimulationEvent =
   | { readonly kind: "branchPointerMoved"; readonly branchName: string; readonly target: PredictedCommit | { readonly kind: "existingCommit"; readonly id: string } }
   | { readonly kind: "headSymbolicRefChanged"; readonly branchName: string }
   | { readonly kind: "headBranchRelationRetained"; readonly branchName: string }
-  | { readonly kind: "headDetachedMoved"; readonly target: PredictedCommit }
+  | { readonly kind: "headDetachedMoved"; readonly target: PredictedCommit | { readonly kind: "existingCommit"; readonly id: string } }
   | { readonly kind: "branchCreated"; readonly branchName: string; readonly target: { readonly kind: "existingCommit"; readonly id: string } }
   | { readonly kind: "unbornSymbolicBranchChanged"; readonly branchName: string }
   | { readonly kind: "derivedRelationInvalidated"; readonly relation: "comparison" | "upstream" }
@@ -46,6 +70,8 @@ export type SimulationEvent =
   | { readonly kind: "stashEntryRemovedAfterSuccessfulApply"; readonly stashIndex?: number }
   | { readonly kind: "fetchRequested"; readonly target: "default" | { readonly remote: string; readonly configuration: "confirmed" | "notFound" | "unknown" } }
   | { readonly kind: "remoteTrackingMayRefresh" }
+  | { readonly kind: "pullFetchRequested"; readonly target: "default" | { readonly remote: string; readonly branch: string } }
+  | { readonly kind: "pullIntegrationPlanned"; readonly method: "rebase" | "unknown" }
   | { readonly kind: "pushRequested"; readonly target: "default" | { readonly remote: string; readonly branch: string; readonly localTipCommitId?: string } }
   | { readonly kind: "branchUpstreamConfigured"; readonly branchName: string; readonly remoteName: string; readonly remoteBranchName: string }
   | { readonly kind: "noOp" };
@@ -70,6 +96,6 @@ export interface BlockedSimulation extends SimulationBase {
 }
 export interface UnsupportedSimulation extends SimulationBase {
   readonly kind: "unsupported";
-  readonly reason: "commandNotImplemented" | "implicitRemoteGuessNotModeled" | "operationNotNormal";
+  readonly reason: "commandNotImplemented" | "implicitRemoteGuessNotModeled" | "operationNotNormal" | "mergeCommitRebaseNotModeled";
 }
 export type SimulationResult = SupportedSimulation | BlockedSimulation | UnsupportedSimulation;

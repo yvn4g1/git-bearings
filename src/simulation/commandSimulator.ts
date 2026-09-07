@@ -3,10 +3,12 @@ import type { RepositoryState } from "../domain/repositoryState";
 import type { SimulationResult } from "../domain/simulation";
 import { simulateBasicGitCommand } from "./basicCommandSimulator";
 import { simulateStashRemoteCommand } from "./stashRemoteCommandSimulator";
+import { simulateHistoryCommand } from "./historyCommandSimulator";
 
 export function simulateGitCommand(state: RepositoryState, command: GitCommand): SimulationResult {
   switch (command.kind) {
     case "stashPush": case "stashList": case "stashApply": case "stashPop": case "fetch": case "push": return simulateStashRemoteCommand(state, command);
+    case "merge": case "rebase": case "pull": return simulateHistoryCommand(state, command);
     default: return simulateBasicGitCommand(state, command);
   }
 }
