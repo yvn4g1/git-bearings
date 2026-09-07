@@ -45,8 +45,19 @@ test("future tracking Unknown is localized to the Remote overlay", () => {
   assert.deepEqual(preview.map?.unknowns.local, []);
 });
 
+test("fast-forward predicted branch ref does not overlap an existing same-target ref", () => {
+  const current = { id, shortId: id.slice(0, 7), subject: "current" }; const targetId = "b".repeat(40); const target = { id: targetId, shortId: targetId.slice(0, 7), subject: "target" };
+  const facts = state({ currentLocation: { kind: "branch", branchName: "main", head: current, detached: false }, localBranches: [{ name: "main", tipCommitId: id }, { name: "feature/test", tipCommitId: targetId }], history: [{ commit: target, parentIds: [id] }, { commit: current, parentIds: [] }] });
+  const preview = createCommandPreviewPresentation({ active: analyzeCommand(facts, "git merge feature/test"), history: [] }, facts); const map = createGitMapPresentation({ kind: "available", repositoryId: "repo", state: facts }, { kind: "overview" }, { kind: "idle" }, preview);
+  if (map.graph.kind !== "graph") throw new Error("graph expected"); const existing = map.graph.localBranches.find((ref) => ref.label === "feature/test")!; const predicted = map.graph.predictionPointers?.find((pointer) => pointer.kind === "branch")!;
+  const predictedBounds = { left: predicted.x - 42, top: predicted.y - 14, width: 84, height: 18 };
+  assert.equal(preview.map?.predictions.length, 0); assert.equal(predicted.label, "main"); assert.equal(predicted.toX, map.graph.nodes.find((node) => node.commitId === targetId)?.x); assert.equal(boundsOverlap(existing.bounds, predictedBounds), false);
+});
+
 test("commit prediction is placed right of factual refs with separate predicted branch and HEAD", () => {
   const facts = state(); const preview = createCommandPreviewPresentation({ active: analyzeCommand(facts, 'git commit -m "save"'), history: [] }, facts); const map = createGitMapPresentation({ kind: "available", repositoryId: "repo", state: facts }, { kind: "overview" }, { kind: "idle" }, preview);
   if (map.graph.kind !== "graph") throw new Error("graph expected"); const predicted = map.graph.predictionCommits?.[0]; const factRight = Math.max(...map.graph.localBranches.map((ref) => ref.bounds.left + ref.bounds.width));
   assert.ok(predicted && predicted.x > factRight); assert.equal(map.graph.predictionPointers?.some((item) => item.kind === "branch"), true); assert.ok((map.graph.predictionPointers?.find((item) => item.kind === "branch")?.y ?? 0) < (predicted?.y ?? 0));
 });
+
+function boundsOverlap(left: { left: number; top: number; width: number; height: number }, right: { left: number; top: number; width: number; height: number }): boolean { return left.left < right.left + right.width && right.left < left.left + left.width && left.top < right.top + right.height && right.top < left.top + left.height; }
