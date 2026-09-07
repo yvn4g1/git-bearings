@@ -1,7 +1,7 @@
 import type { RepositoryState } from "../domain/repositoryState";
 
 export type RepositoryStateSnapshot =
-  | { readonly kind: "empty" }
+  | { readonly kind: "empty"; readonly reason?: "initial" | "noRepository" }
   | { readonly kind: "loading"; readonly repositoryId: string; readonly rootPath: string }
   | { readonly kind: "available"; readonly repositoryId: string; readonly state: RepositoryState }
   | { readonly kind: "unavailable"; readonly repositoryId: string; readonly rootPath: string; readonly reason: string };
@@ -17,7 +17,7 @@ export class RepositoryStateSnapshotStore {
     for (const listener of this.listeners) listener(snapshot);
   }
 
-  clear(): void { this.set({ kind: "empty" }); }
+  clear(reason: "initial" | "noRepository" = "initial"): void { this.set({ kind: "empty", reason }); }
 
   onDidChange(listener: (snapshot: RepositoryStateSnapshot) => void): { dispose(): void } {
     this.listeners.add(listener);

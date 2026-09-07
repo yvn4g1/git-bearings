@@ -72,7 +72,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
   const source = new VscodeGitRepositorySource(
     () => getGitApi(),
-    (candidates) => selection.updateCandidates(candidates),
+    (candidates) => { selection.updateCandidates(candidates); if (candidates.length === 0) snapshotStore.clear("noRepository"); },
     (reason) => selection.setUnavailable(reason),
     (repositoryId) => refreshController?.requestAutoRefresh(repositoryId),
   );

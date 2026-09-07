@@ -39,7 +39,7 @@ export interface GitMapPresentation {
 }
 
 export function createGitMapPresentation(snapshot: RepositoryStateSnapshot, selection: SelectionState = { kind: "overview" }, commitDetail: CommitDetailState = { kind: "idle" }, commandPreview?: CommandPreviewPresentation, detailMode: DetailMode = "inspect"): GitMapPresentation {
-  if (snapshot.kind === "empty") return unavailable(snapshot, "Git状態をまだ読み取っていません");
+  if (snapshot.kind === "empty") return unavailable(snapshot, snapshot.reason === "noRepository" ? "このworkspaceではGit Repositoryが見つかっていません。Git Bearingsは既存Repositoryの状態を読み取るツールです。" : "Git状態をまだ読み取っていません");
   if (snapshot.kind === "loading") return unavailable(snapshot, "Git状態を読み取り中…");
   if (snapshot.kind === "unavailable") return unavailable(snapshot, "Git状態を安全に取得できません", snapshot.reason);
   const state = snapshot.state;
@@ -109,8 +109,9 @@ function upstreamFacts(state: RepositoryState): Pick<GitMapPresentation, "upstre
 }
 
 function operationBanner(state: RepositoryState): string | undefined {
-  if (state.operation.kind === "merge") return "merge処理中";
-  if (state.operation.kind === "rebase") return "rebase処理中";
+  const conflicts = state.workingTree.conflicts.length ? `・未解決conflict ${state.workingTree.conflicts.length}件` : "";
+  if (state.operation.kind === "merge") return `merge処理中${conflicts}`;
+  if (state.operation.kind === "rebase") return `rebase処理中${conflicts}`;
   if (state.operation.kind === "unsupported") return `${state.operation.operationName}: Git処理の途中です`;
   return undefined;
 }

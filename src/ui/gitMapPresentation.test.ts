@@ -10,6 +10,12 @@ test("empty, loading, and unavailable snapshots are safe", () => {
   assert.equal(createGitMapPresentation({ kind: "empty" }).message, "Git状態をまだ読み取っていません");
   assert.equal(createGitMapPresentation({ kind: "loading", repositoryId: "repo", rootPath: "/work/repo" }).message, "Git状態を読み取り中…");
   assert.equal(createGitMapPresentation({ kind: "unavailable", repositoryId: "repo", rootPath: "/work/repo", reason: "core failed" }).unavailableReason, "core failed");
+  assert.ok(createGitMapPresentation({ kind: "empty", reason: "noRepository" }).message?.includes("Git Repositoryが見つかっていません"));
+});
+
+test("operation banner keeps facts and reports conflict count", () => {
+  const map = presentation({ operation: { kind: "merge" }, workingTree: { staged: [], unstaged: [], untracked: [], conflicts: [{ path: "a", kind: "bothModified" }] } });
+  assert.equal(map.operationBanner, "merge処理中・未解決conflict 1件"); assert.equal(map.workingTree.conflictsCount, 1);
 });
 
 test("working tree buckets retain their factual counts", () => {
