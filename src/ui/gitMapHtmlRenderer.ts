@@ -17,11 +17,11 @@ function availableMap(presentation: GitMapPresentation): string {
   const inspect = presentation.explanation ? `<p>選択中: ${escapeHtml(presentation.explanation.identity)}</p><p class="detail-level1">${escapeHtml(presentation.explanation.level1)}</p>${commitDetail(presentation.commitDetail)}<details class="detail-more"><summary>もっと詳しく</summary><p>${escapeHtml(presentation.explanation.level2)}</p></details>` : `<p>選択中: ${escapeHtml(presentation.detailIdentity ?? "Overview")}</p>${renderOverviewHtml(createOverviewPresentation(presentation.detailSnapshot))}`;
   const detail = presentation.detailMode === "commandInput" ? commandDetail(presentation.commandPreview) : inspect;
   const preview = presentation.commandPreview?.map ?? undefined;
-  const workingOverlay = regionOverlay("Working Tree → Staging", preview?.workingTree, preview?.warnings, preview?.unknowns.workingTree);
-  const stagingOverlay = regionOverlay("Staging ← Working Tree", preview?.staging, preview?.warnings, preview?.unknowns.staging);
-  const stashOverlay = regionOverlay("Stash Shelf Prediction", preview?.stash, preview?.warnings, preview?.unknowns.stash);
-  const localOverlay = regionOverlay("Local Prediction", preview?.local, preview?.warnings, preview?.unknowns.local);
-  const remoteOverlay = regionOverlay("Remote / external wait", preview?.remote, preview?.warnings, preview?.unknowns.remote);
+  const workingOverlay = regionOverlay("Working Tree → Staging", preview?.workingTree, preview?.warnings.workingTree, preview?.unknowns.workingTree);
+  const stagingOverlay = regionOverlay("Staging ← Working Tree", preview?.staging, preview?.warnings.staging, preview?.unknowns.staging);
+  const stashOverlay = regionOverlay("Stash Shelf Prediction", preview?.stash, preview?.warnings.stash, preview?.unknowns.stash);
+  const localOverlay = regionOverlay("Local Prediction", preview?.local, preview?.warnings.local, preview?.unknowns.local);
+  const remoteOverlay = regionOverlay("Remote / external wait", preview?.remote, preview?.warnings.remote, preview?.unknowns.remote);
   return `<main class="surface" aria-label="Git Map"><section class="region fact-state${visualClass(presentation.workingTree.visualState)}"${selectionAttr({ kind: "workingTree", section: "overview" }, presentation.workingTree.visualState === "selected")}><h2>WORKING TREE</h2>${workingTree(presentation.workingTree)}${workingOverlay}</section><p class="flow" aria-hidden="true">↓ git add：内容をStagingへ記録</p><section class="region staging fact-state${visualClass(presentation.staging.visualState)}"${selectionAttr({ kind: "staging" }, presentation.staging.visualState === "selected")}><h2>STAGING</h2>${facts([{ label: "Staged", value: String(presentation.staging.stagedCount) }])}${stagingOverlay}</section>${stash(presentation.stash)}${stashOverlay}<p class="flow" aria-hidden="true">↓ commit：Staging内容からcommitを作成</p><section class="region"><h2>LOCAL REPOSITORY</h2>${localOverlay}${renderCommitGraph(presentation.graph)}</section><section class="region"><h2>REMOTE</h2>${remote}${upstream}${remoteOverlay}<p class="muted">Remote情報はローカルGitが最後に取得した情報です。live Remoteの状態ではありません。</p></section><details open><summary>Detail</summary><p><button data-preview-action="detailInspect">現在の選択</button><button data-preview-action="detailCommand">このコマンド何する？</button></p>${detail}</details></main>`;
 }
 

@@ -54,6 +54,13 @@ test("fast-forward predicted branch ref does not overlap an existing same-target
   assert.equal(preview.map?.predictions.length, 0); assert.equal(predicted.label, "main"); assert.equal(predicted.toX, map.graph.nodes.find((node) => node.commitId === targetId)?.x); assert.equal(boundsOverlap(existing.bounds, predictedBounds), false);
 });
 
+test("true merge conflict warning is localized to the Local Repository overlay", () => {
+  const rootId = "r".repeat(40); const currentId = "c".repeat(40); const targetId = "b".repeat(40); const current = { id: currentId, shortId: currentId.slice(0, 7), subject: "current" }; const target = { id: targetId, shortId: targetId.slice(0, 7), subject: "target" }; const root = { id: rootId, shortId: rootId.slice(0, 7), subject: "root" };
+  const facts = state({ currentLocation: { kind: "branch", branchName: "main", head: current, detached: false }, localBranches: [{ name: "main", tipCommitId: currentId }, { name: "feature/test", tipCommitId: targetId }], workingTree: { staged: [], unstaged: [], untracked: [], conflicts: [] }, history: [{ commit: current, parentIds: [rootId] }, { commit: target, parentIds: [rootId] }, { commit: root, parentIds: [] }], comparison: { kind: "available", value: { baseRef: "refs/heads/feature/test", mergeBase: root, ahead: 1, behind: 1 } } });
+  const preview = createCommandPreviewPresentation({ active: analyzeCommand(facts, "git merge feature/test"), history: [] }, facts); const warning = "mergeでconflictが起こる可能性があります。";
+  assert.deepEqual(preview.map?.warnings.local, [warning]); assert.deepEqual(preview.map?.warnings.workingTree, []); assert.deepEqual(preview.map?.warnings.staging, []); assert.deepEqual(preview.map?.warnings.stash, []); assert.deepEqual(preview.map?.warnings.remote, []); assert.equal(preview.map?.predictions[0]?.parentCommitIds.length, 2); assert.equal(preview.map?.pointers.some((pointer) => pointer.kind === "branch" && pointer.label === "main"), true);
+});
+
 test("commit prediction is placed right of factual refs with separate predicted branch and HEAD", () => {
   const facts = state(); const preview = createCommandPreviewPresentation({ active: analyzeCommand(facts, 'git commit -m "save"'), history: [] }, facts); const map = createGitMapPresentation({ kind: "available", repositoryId: "repo", state: facts }, { kind: "overview" }, { kind: "idle" }, preview);
   if (map.graph.kind !== "graph") throw new Error("graph expected"); const predicted = map.graph.predictionCommits?.[0]; const factRight = Math.max(...map.graph.localBranches.map((ref) => ref.bounds.left + ref.bounds.width));
