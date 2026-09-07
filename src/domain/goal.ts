@@ -21,7 +21,6 @@ const step = (id: string, command: GitCommand, afterPrevious = false): GoalStep 
 const recommendation = (kind: "primary" | "alternative", label: string, steps: readonly GoalStep[], advanced = false): GoalRecommendation => ({ kind, label, steps, ...(advanced ? { advanced: true } : {}) });
 const result = (id: GoalId, current: string, change: string, outcome: GoalResolution["outcome"], extra: Partial<GoalResolution> = {}): GoalResolution => ({ goalId: id, label: meta(id).label, category: meta(id).category, current, change, outcome, ...extra });
 const dirty = (state: RepositoryState) => state.workingTree.staged.length + state.workingTree.unstaged.length + state.workingTree.untracked.length > 0;
-const blocked = (state: RepositoryState) => state.workingTree.conflicts.length > 0 || state.operation.kind !== "normal";
 const currentBranch = (state: RepositoryState) => state.currentLocation.kind === "branch" ? state.currentLocation.branchName : undefined;
 const remotes = (state: RepositoryState) => state.remotes.kind === "available" ? state.remotes.value.map((item) => ({ kind: "remote" as const, remote: item.name })).filter((item) => safe(item.remote)) : [];
 const safe = (value: string) => value.length > 0 && value.length <= 256 && !value.startsWith("-") && !/[\r\n]/.test(value);
@@ -29,7 +28,7 @@ const branchChoices = (state: RepositoryState) => state.localBranches.filter((it
 const knownBase = (state: RepositoryState): string | undefined => { if (state.comparison.kind !== "available") return undefined; const ref = state.comparison.value.baseRef; const local = state.localBranches.find((item) => `refs/heads/${item.name}` === ref && safe(item.name)); if (local) return local.name; if (state.remotes.kind !== "available") return undefined; const known = state.remotes.value.flatMap((remote) => remote.trackingRefs.map((tracking) => ({ remote, tracking }))).find(({ remote, tracking }) => tracking.trackingRef === ref && safe(`${remote.name}/${tracking.branchName}`)); return known ? `${known.remote.name}/${known.tracking.branchName}` : undefined; };
 
 export function resolveGoal(state: RepositoryState, request: GoalRequest): GoalResolution {
-  const id = request.goalId; if (blocked(state)) return result(id, "未解決のconflictまたは別のGit処理があります。", "安全に操作を案内できません。", "blocked");
+  const id = request.goalId; if (state.workingTree.conflicts.length) return result(id, "未解決のconflictがあります。", "安全に操作を案内できません。", "blocked"); if (state.operation.kind !== "normal") return result(id, "別のGit処理の途中です。", "現在のSimulatorではこの操作を扱いません。", "unsupported");
   const staged = state.workingTree.staged.length > 0; const unstaged = state.workingTree.unstaged.length > 0 || state.workingTree.untracked.length > 0;
   if (id === "stageChanges") return unstaged ? result(id, "まだStagingへ入っていない変更があります。", "変更をStagingへ記録します。", "recommended", { primary: recommendation("primary", "変更をStagingへ入れる", [step("add", { kind: "add", target: { kind: "repositoryRoot" } })]) }) : result(id, "追加でStagingへ入れる変更はありません。", "操作は不要です。", "noOperationNeeded");
   if (id === "unstageChanges") return staged ? result(id, "Stagingに変更があります。", "Stagingから外します。", "recommended", { primary: recommendation("primary", "Stagingから外す", [step("unstage", { kind: "unstage", syntax: "restoreStaged", paths: ["."] })]) }) : result(id, "Stagingは空です。", "操作は不要です。", "noOperationNeeded");

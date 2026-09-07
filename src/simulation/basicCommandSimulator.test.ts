@@ -111,3 +111,9 @@ test("non-normal and later commands are explicitly unsupported", () => {
   assert.equal(simulateBasicGitCommand(state({ operation: { kind: "merge" } }), command({ kind: "add", target: { kind: "repositoryRoot" } })).kind, "unsupported");
   assert.equal(simulateBasicGitCommand(state(), command({ kind: "stashList" })).kind, "unsupported");
 });
+
+test("restore staged repository root removes each factual staged path and keeps working tree", () => {
+  const result = simulateBasicGitCommand(state({ workingTree: { staged: [{ path: "a", kind: "modified" }, { path: "b", kind: "deleted" }], unstaged: [], untracked: [], conflicts: [] } }), command({ kind: "unstage", syntax: "restoreStaged", paths: ["."] }));
+  assert.deepEqual(result.events, [{ kind: "stagingRemoved", path: "a", workingTreeRetained: true }, { kind: "stagingRemoved", path: "b", workingTreeRetained: true }]);
+  assert.deepEqual(simulateBasicGitCommand(state(), command({ kind: "unstage", syntax: "restoreStaged", paths: ["."] })).events, [{ kind: "noOp" }]);
+});

@@ -34,6 +34,7 @@ function add(state: RepositoryState, command: Extract<GitCommand, { kind: "add" 
 function unstage(state: RepositoryState, command: Extract<GitCommand, { kind: "unstage" }>, base: Base): SimulationResult {
   if (state.currentLocation.kind === "unborn") return { ...base, kind: "blocked", reason: "unbornHead" };
   const events: SimulationEvent[] = []; const unknowns: SimulationNote[] = [];
+  if (command.paths.length === 1 && command.paths[0] === ".") return { ...base, kind: "supported", events: state.workingTree.staged.length ? state.workingTree.staged.map((item) => ({ kind: "stagingRemoved" as const, path: item.path, workingTreeRetained: true })) : [{ kind: "noOp" }], unknowns };
   for (const path of command.paths) {
     if (state.workingTree.staged.some((item) => item.path === path)) events.push({ kind: "stagingRemoved", path, workingTreeRetained: true });
     else if (command.syntax === "resetHead" || knownTracked(state, path)) events.push({ kind: "noOp" });
