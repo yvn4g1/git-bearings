@@ -62,6 +62,17 @@ test("Core reader and Commit Graph include an unmerged local branch without mixi
     assert.ok(featureNode);
     assert.equal(mainNode.roles.includes("current"), true);
     assert.notEqual(mainNode.y, featureNode.y);
+
+    const mainRef = graph.localBranches.find((ref) => ref.label === "main");
+    const featureRef = graph.localBranches.find((ref) => ref.label === "feature/manual-graph-test");
+    assert.ok(mainRef);
+    assert.ok(featureRef);
+    assert.equal(mainRef.current, true);
+    assert.ok(mainRef.y < mainNode.y);
+    assert.equal(featureRef.current, false);
+    assert.ok(featureRef.y > featureNode.y);
+    assert.ok(featureRef.connector.fromY < featureRef.y);
+    assert.ok(featureRef.connector.toY > featureNode.y);
   } finally {
     await rm(repository, { recursive: true, force: true });
   }
