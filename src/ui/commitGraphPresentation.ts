@@ -57,10 +57,14 @@ const X_STEP = 130;
 const Y_STEP = 72;
 const PADDING_X = 28;
 const PADDING_Y = 32;
-const LOCAL_REF_WIDTH = 96;
+const LOCAL_REF_MIN_WIDTH = 96;
+const LOCAL_REF_MAX_WIDTH = 220;
+const LOCAL_REF_CHAR_WIDTH = 7;
+const LOCAL_REF_PADDING = 20;
 const REF_HEIGHT = 20;
 const REF_Y = 48;
 const REF_FAN_STEP = 112;
+const REF_GAP = 12;
 
 export function createCommitGraphPresentation(state: RepositoryState): CommitGraphPresentation {
   if (state.history.length === 0) {
@@ -109,9 +113,15 @@ export function createCommitGraphPresentation(state: RepositoryState): CommitGra
       const target = nodeById.get(targetCommitId)!;
       const isCurrent = (branch: typeof branches[number]) => state.currentLocation.kind === "branch" && branch.name === state.currentLocation.branchName;
       const orderedBranches = [...branches].sort((left, right) => Number(isCurrent(right)) - Number(isCurrent(left)) || left.name.localeCompare(right.name));
+      let previousRight = Number.NEGATIVE_INFINITY;
       return orderedBranches.map((branch, index) => {
         const current = isCurrent(branch);
-        return localRef(branch.name, targetCommitId, target.x + index * REF_FAN_STEP, current ? REF_Y : target.y + 38, target.x, target.y, current);
+        const width = localRefWidth(branch.name);
+        const preferredX = target.x + index * REF_FAN_STEP;
+        const x = index === 0 ? target.x : Math.max(preferredX, previousRight + REF_GAP + width / 2);
+        const ref = localRef(branch.name, targetCommitId, x, current ? REF_Y : target.y + 38, target.x, target.y, current, width);
+        previousRight = ref.bounds.left + ref.bounds.width;
+        return ref;
       });
     });
     const trackingFacts = state.remotes.kind !== "available" ? [] : state.remotes.value.flatMap((remote) => remote.trackingRefs.map((ref) => ({ remoteName: remote.name, branchName: ref.branchName, trackingRef: ref.trackingRef, commitId: ref.commitId }))).filter((ref) => nodeById.has(ref.commitId));
@@ -126,10 +136,15 @@ export function createCommitGraphPresentation(state: RepositoryState): CommitGra
   }
 }
 
-function localRef(label: string, targetCommitId: string, x: number, y: number, targetX: number, targetY: number, current: boolean): GraphRef {
-  const ref = graphRef("local", label, targetCommitId, x, y, targetX, targetY, current, LOCAL_REF_WIDTH);
+function localRef(label: string, targetCommitId: string, x: number, y: number, targetX: number, targetY: number, current: boolean, width: number): GraphRef {
+  const ref = graphRef("local", label, targetCommitId, x, y, targetX, targetY, current, width);
   if (y <= targetY) return ref;
   return { ...ref, connector: { fromX: x, fromY: y - REF_HEIGHT / 2, toX: targetX, toY: targetY + 8 } };
+}
+
+function localRefWidth(label: string): number {
+  const estimatedTextWidth = Array.from(label).length * LOCAL_REF_CHAR_WIDTH + LOCAL_REF_PADDING;
+  return Math.min(LOCAL_REF_MAX_WIDTH, Math.max(LOCAL_REF_MIN_WIDTH, estimatedTextWidth));
 }
 
 function graphRef(kind: GraphRef["kind"], label: string, targetCommitId: string, x: number, y: number, targetX: number, targetY: number, current: boolean, width: number): GraphRef {
