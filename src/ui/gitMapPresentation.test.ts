@@ -38,8 +38,8 @@ test("local repository graph uses actual current state and creates no unborn com
 test("remote absence, cached refs, and supplemental failure remain distinct", () => {
   assert.equal(presentation({ remotes: { kind: "available", value: [] } }).remoteMessage, "Remote は設定されていません");
   const remote = presentation({ remotes: { kind: "available", value: [{ name: "origin", trackingRefs: [{ branchName: "main", trackingRef: "refs/remotes/origin/main", commitId: oid }], locallyKnownDefaultBranch: { branchName: "main", trackingRef: "refs/remotes/origin/main" } }] } });
-  assert.deepEqual(remote.remotes[0].facts, [{ label: "ローカルにある追跡ref", value: "1" }, { label: "ローカルで分かるdefault", value: "origin/main" }]);
-  assert.deepEqual(remote.remotes[0].liveRemote, { label: "live Remote", message: "未確認（自動fetchしません）" });
+  assert.deepEqual(remote.remotes[0].facts, [{ label: "最後に把握している既定branch", value: "origin/main" }]);
+  assert.deepEqual(remote.remotes[0].liveRemote, { label: "現在のRemote", message: "未確認（自動fetchしません）" });
   const unavailable = presentation({ remotes: { kind: "unavailable", reason: "remote failed" }, comparison: { kind: "unavailable", reason: "comparison failed" }, upstream: { kind: "unavailable", reason: "upstream failed" } });
   assert.equal(unavailable.remoteMessage, "Remote情報を取得できません");
   assert.equal(unavailable.remoteUnavailableReason, "remote failed");
@@ -55,9 +55,9 @@ test("only origin is a normal Remote representative", () => {
   assert.deepEqual(withOrigin.remotes.map((remote) => remote.name), ["origin"]);
 });
 
-test("upstream relation is sourced from RepositoryState", () => {
+test("upstream relation is sourced from RepositoryState and summarized for beginners", () => {
   const map = presentation({ upstream: { kind: "available", value: { remoteName: "origin", branchName: "feature", trackingRef: "refs/remotes/origin/feature", relation: { kind: "available", value: { ahead: 2, behind: 1 } } } } });
-  assert.deepEqual(map.upstream, [{ label: "追跡", value: "upstream: origin/feature" }, { label: "あなた側のみ", value: "2" }, { label: "upstream側のみ", value: "1" }]);
+  assert.deepEqual(map.upstream, [{ label: "追跡先", value: "origin/feature" }, { label: "差分", value: "feature と origin/feature は分岐しています（あなた側 +2 / 追跡先側 +1）" }]);
 });
 
 test("base configuration is left to the detail layer without guessing", () => {

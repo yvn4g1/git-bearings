@@ -121,6 +121,7 @@ const COMMAND_SIGNATURES: readonly CommandSignature[] = [
       "--max-count=50",
       "--topo-order",
       "--format=format:%H%x00%h%x00%P%x00%s",
+      "--branches",
       "HEAD",
     ],
     requiresCwd: true,

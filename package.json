@@ -49,7 +49,7 @@
     "compile": "tsc -p ./",
     "check": "tsc --noEmit -p ./",
     "test:git-executor": "npm run compile && node --test out/git/gitExecutor.test.js",
-    "test:core-reader": "npm run compile && node --test out/git/coreRepositoryReader.test.js",
+    "test:core-reader": "npm run compile && node --test out/git/coreRepositoryReader.test.js out/git/p28LocalBranchHistory.test.js",
     "test:repository-selection": "npm run compile && node --test out/domain/appViewStateStore.test.js out/domain/selectionReconciliation.test.js out/repository/repositorySelection.test.js out/repository/vscodeGitRepositorySource.test.js",
     "test:supplemental-reader": "npm run compile && node --test out/git/supplementalRepositoryReader.test.js",
     "test:comparison": "npm run compile && node --test out/git/branchComparisonReader.test.js out/repository/baseResolver.test.js out/repository/basePreference.test.js out/repository/baseSelection.test.js out/repository/repositoryStateComposer.test.js out/repository/repositoryStateReader.test.js",

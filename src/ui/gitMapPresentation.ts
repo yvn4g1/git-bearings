@@ -95,17 +95,25 @@ function remoteFacts(state: RepositoryState, selection: SelectionState): Pick<Gi
   if (state.remotes.kind === "unavailable") return { remotes: [], remoteMessage: "Remote情報を取得できません", remoteUnavailableReason: state.remotes.reason, ...upstream };
   if (state.remotes.kind === "notConfigured" || state.remotes.value.length === 0) return { remotes: [], remoteMessage: "Remote は設定されていません", ...upstream };
   const origin = state.remotes.value.find((remote) => remote.name === "origin");
-  return origin ? { remotes: [{ name: origin.name, facts: [{ label: "ローカルにある追跡ref", value: String(origin.trackingRefs.length) }, ...(origin.locallyKnownDefaultBranch ? [{ label: "ローカルで分かるdefault", value: `${origin.name}/${origin.locallyKnownDefaultBranch.branchName}` }] : [])], liveRemote: { label: "live Remote", message: "未確認（自動fetchしません）" }, ...(selection.kind === "remote" && selection.remoteName === origin.name ? { visualState: "selected" as const } : {}) }], ...upstream } : { remotes: [], remoteMessage: "origin は設定されていません", ...upstream };
+  return origin ? { remotes: [{ name: origin.name, facts: origin.locallyKnownDefaultBranch ? [{ label: "最後に把握している既定branch", value: `${origin.name}/${origin.locallyKnownDefaultBranch.branchName}` }] : [], liveRemote: { label: "現在のRemote", message: "未確認（自動fetchしません）" }, ...(selection.kind === "remote" && selection.remoteName === origin.name ? { visualState: "selected" as const } : {}) }], ...upstream } : { remotes: [], remoteMessage: "origin は設定されていません", ...upstream };
 }
 
 function upstreamFacts(state: RepositoryState): Pick<GitMapPresentation, "upstream" | "upstreamUnavailableReason" | "upstreamSelection"> {
-  if (state.upstream.kind === "notConfigured") return { upstream: [{ label: "upstream", value: "設定されていません" }] };
-  if (state.upstream.kind === "unavailable") return { upstream: [{ label: "upstream", value: "情報を取得できません" }], upstreamUnavailableReason: state.upstream.reason };
+  if (state.upstream.kind === "notConfigured") return { upstream: [{ label: "追跡先", value: "設定されていません" }] };
+  if (state.upstream.kind === "unavailable") return { upstream: [{ label: "追跡先", value: "情報を取得できません" }], upstreamUnavailableReason: state.upstream.reason };
   const value = state.upstream.value;
-  const target = value.remoteName === "." ? `ローカルupstream: ${value.branchName}` : `upstream: ${value.remoteName}/${value.branchName}`;
-  if (value.relation.kind === "unavailable") return { upstream: [{ label: "追跡", value: target }, { label: "差分", value: "取得できません" }], upstreamUnavailableReason: value.relation.reason, upstreamSelection: { remoteName: value.remoteName, branchName: value.branchName } };
+  const target = value.remoteName === "." ? `ローカルbranch ${value.branchName}` : `${value.remoteName}/${value.branchName}`;
+  if (value.relation.kind === "unavailable") return { upstream: [{ label: "追跡先", value: target }, { label: "差分", value: "取得できません" }], upstreamUnavailableReason: value.relation.reason, upstreamSelection: { remoteName: value.remoteName, branchName: value.branchName } };
   const relation = value.relation.value;
-  return { upstream: [{ label: "追跡", value: target }, { label: "あなた側のみ", value: String(relation.ahead) }, { label: "upstream側のみ", value: String(relation.behind) }], upstreamSelection: { remoteName: value.remoteName, branchName: value.branchName } };
+  const current = state.currentLocation.kind === "branch" ? state.currentLocation.branchName : "現在地";
+  const summary = relation.ahead === 0 && relation.behind === 0
+    ? `${current} と ${target} は同じ地点です`
+    : relation.ahead > 0 && relation.behind === 0
+      ? `${current} は ${target} より ${relation.ahead} commit先です`
+      : relation.ahead === 0 && relation.behind > 0
+        ? `${current} は ${target} より ${relation.behind} commit後ろです`
+        : `${current} と ${target} は分岐しています（あなた側 +${relation.ahead} / 追跡先側 +${relation.behind}）`;
+  return { upstream: [{ label: "追跡先", value: target }, { label: "差分", value: summary }], upstreamSelection: { remoteName: value.remoteName, branchName: value.branchName } };
 }
 
 function operationBanner(state: RepositoryState): string | undefined {

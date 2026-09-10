@@ -38,6 +38,7 @@ const HISTORY_ARGS = [
   "--max-count=50",
   "--topo-order",
   "--format=format:%H%x00%h%x00%P%x00%s",
+  "--branches",
   "HEAD",
 ] as const;
 const OPERATION_PATHS = [
@@ -344,8 +345,8 @@ function conflictKind(xy: string): ConflictKind {
 
 function createCurrentLocation(status: ParsedStatus, history: readonly HistoryCommit[]): CurrentLocation {
   if (status.headKind === "unborn") return { kind: "unborn", branchName: status.branchName!, head: null, detached: false };
-  const head = history[0]?.commit;
-  if (!head) throw new Error("HEAD exists but history is empty.");
+  const head = history.find((entry) => entry.commit.id === status.headId)?.commit;
+  if (!head) throw new Error("HEAD commit is missing from history snapshot.");
   return status.headKind === "detached"
     ? { kind: "detached", branchName: null, head, detached: true }
     : { kind: "branch", branchName: status.branchName!, head, detached: false };
@@ -357,7 +358,7 @@ function assertSnapshotInvariant(
   localBranches: readonly LocalBranch[],
   history: readonly HistoryCommit[],
 ): void {
-  if (status.headId !== null && history[0]?.commit.id !== status.headId) throw new Error("HEAD and history snapshot do not match.");
+  if (status.headId !== null && !history.some((entry) => entry.commit.id === status.headId)) throw new Error("HEAD and history snapshot do not match.");
   if (location.kind === "branch") {
     const branch = localBranches.find((candidate) => candidate.name === location.branchName);
     if (!branch || branch.tipCommitId !== status.headId) throw new Error("Current branch snapshot does not match.");
