@@ -66,6 +66,10 @@ const REF_HEIGHT = 20;
 const REF_Y = 48;
 const REF_FAN_STEP = 112;
 const REF_GAP = 12;
+const CURRENT_CONTEXT_LEFT_OFFSET = 9;
+const CURRENT_CONTEXT_TOP_OFFSET = 18;
+const CURRENT_CONTEXT_WIDTH = 230;
+const CURRENT_CONTEXT_HEIGHT = 40;
 
 export function createCommitGraphPresentation(state: RepositoryState): CommitGraphPresentation {
   if (state.history.length === 0) {
@@ -109,22 +113,7 @@ export function createCommitGraphPresentation(state: RepositoryState): CommitGra
     }
     const maxRank = Math.max(...ranks.values());
     const maxLane = Math.max(...lanes.values());
-    const grouped = new Map<string, typeof state.localBranches>(); for (const branch of state.localBranches.filter((branch) => nodeById.has(branch.tipCommitId))) grouped.set(branch.tipCommitId, [...(grouped.get(branch.tipCommitId) ?? []), branch]);
-    const localBranches = [...grouped.entries()].flatMap(([targetCommitId, branches]) => {
-      const target = nodeById.get(targetCommitId)!;
-      const isCurrent = (branch: typeof branches[number]) => state.currentLocation.kind === "branch" && branch.name === state.currentLocation.branchName;
-      const orderedBranches = [...branches].sort((left, right) => Number(isCurrent(right)) - Number(isCurrent(left)) || left.name.localeCompare(right.name));
-      let previousRight = Number.NEGATIVE_INFINITY;
-      return orderedBranches.map((branch, index) => {
-        const current = isCurrent(branch);
-        const width = localRefWidth(branch.name);
-        const preferredX = target.x + index * REF_FAN_STEP;
-        const x = index === 0 ? target.x : Math.max(preferredX, previousRight + REF_GAP + width / 2);
-        const ref = localRef(branch.name, targetCommitId, x, current ? REF_Y : target.y + 38, target.x, target.y, current, width);
-        previousRight = ref.bounds.left + ref.bounds.width;
-        return ref;
-      });
-    });
+    const localBranches = placeLocalBranches(state, nodeById, currentId);
     const trackingFacts = state.remotes.kind !== "available" ? [] : state.remotes.value.flatMap((remote) => remote.trackingRefs.map((ref) => ({ remoteName: remote.name, branchName: ref.branchName, trackingRef: ref.trackingRef, commitId: ref.commitId }))).filter((ref) => nodeById.has(ref.commitId));
     const trackingGroups = new Map<string, typeof trackingFacts>(); for (const ref of trackingFacts) trackingGroups.set(ref.commitId, [...(trackingGroups.get(ref.commitId) ?? []), ref]);
     const remoteTrackingRefs = [...trackingGroups.entries()].flatMap(([targetCommitId, refs]) => [...refs].sort((a, b) => a.remoteName.localeCompare(b.remoteName) || a.branchName.localeCompare(b.branchName)).map((ref, index) => { const target = nodeById.get(targetCommitId)!; return { ...graphRef("remoteTracking", `${ref.remoteName}/${ref.branchName}`, targetCommitId, target.x, target.y + 30 + index * 22, target.x, target.y, false, 104), ...ref }; }));
@@ -154,6 +143,46 @@ function compactGraphSubject(subject: string): string {
   return `${visible}…`;
 }
 
+function placeLocalBranches(state: RepositoryState, nodeById: ReadonlyMap<string, CommitGraphNode>, currentId: string | undefined): readonly GraphRef[] {
+  const candidates = state.localBranches
+    .filter((branch) => nodeById.has(branch.tipCommitId))
+    .map((branch) => {
+      const target = nodeById.get(branch.tipCommitId)!;
+      const current = state.currentLocation.kind === "branch" && branch.name === state.currentLocation.branchName;
+      return { branch, target, current, width: localRefWidth(branch.name) };
+    })
+    .sort((left, right) => Number(right.current) - Number(left.current) || left.target.y - right.target.y || left.target.x - right.target.x || left.branch.name.localeCompare(right.branch.name));
+
+  const placed: GraphRef[] = [];
+  const currentNode = currentId ? nodeById.get(currentId) : undefined;
+  const reserved = currentNode ? [{ left: currentNode.x + CURRENT_CONTEXT_LEFT_OFFSET, top: currentNode.y + CURRENT_CONTEXT_TOP_OFFSET, width: CURRENT_CONTEXT_WIDTH, height: CURRENT_CONTEXT_HEIGHT }] : [];
+
+  for (const candidate of candidates) {
+    if (candidate.current) {
+      placed.push(localRef(candidate.branch.name, candidate.branch.tipCommitId, candidate.target.x, REF_Y, candidate.target.x, candidate.target.y, true, candidate.width));
+      continue;
+    }
+
+    let x = candidate.target.x;
+    let ref = localRef(candidate.branch.name, candidate.branch.tipCommitId, x, candidate.target.y + 38, candidate.target.x, candidate.target.y, false, candidate.width);
+    for (let attempt = 0; attempt < 64; attempt += 1) {
+      const collidingBounds = [...placed.map((item) => item.bounds), ...reserved].filter((bounds) => boundsOverlap(ref.bounds, bounds));
+      const connectorCollision = placed.find((item) => connectorIntersectsBounds(ref.connector, item.bounds) || connectorIntersectsBounds(item.connector, ref.bounds));
+      if (collidingBounds.length === 0 && !connectorCollision) break;
+
+      const blockerRight = Math.max(
+        ...collidingBounds.map((bounds) => bounds.left + bounds.width),
+        connectorCollision ? connectorCollision.bounds.left + connectorCollision.bounds.width : Number.NEGATIVE_INFINITY,
+      );
+      x = Math.max(x + REF_FAN_STEP, blockerRight + REF_GAP + candidate.width / 2);
+      ref = localRef(candidate.branch.name, candidate.branch.tipCommitId, x, candidate.target.y + 38, candidate.target.x, candidate.target.y, false, candidate.width);
+    }
+    placed.push(ref);
+  }
+
+  return placed;
+}
+
 function localRef(label: string, targetCommitId: string, x: number, y: number, targetX: number, targetY: number, current: boolean, width: number): GraphRef {
   const ref = graphRef("local", label, targetCommitId, x, y, targetX, targetY, current, width);
   if (y <= targetY) return ref;
@@ -163,6 +192,22 @@ function localRef(label: string, targetCommitId: string, x: number, y: number, t
 function localRefWidth(label: string): number {
   const estimatedTextWidth = Array.from(label).length * LOCAL_REF_CHAR_WIDTH + LOCAL_REF_PADDING;
   return Math.min(LOCAL_REF_MAX_WIDTH, Math.max(LOCAL_REF_MIN_WIDTH, estimatedTextWidth));
+}
+
+function boundsOverlap(left: GraphRefBounds, right: GraphRefBounds): boolean {
+  return left.left < right.left + right.width && left.left + left.width > right.left && left.top < right.top + right.height && left.top + left.height > right.top;
+}
+
+function connectorIntersectsBounds(connector: GraphRefConnector, bounds: GraphRefBounds): boolean {
+  const xInterval = interiorInterval(connector.fromX, connector.toX - connector.fromX, bounds.left, bounds.left + bounds.width);
+  const yInterval = interiorInterval(connector.fromY, connector.toY - connector.fromY, bounds.top, bounds.top + bounds.height);
+  if (!xInterval || !yInterval) return false;
+  return Math.max(0, xInterval[0], yInterval[0]) < Math.min(1, xInterval[1], yInterval[1]);
+}
+
+function interiorInterval(start: number, delta: number, minimum: number, maximum: number): readonly [number, number] | undefined {
+  if (delta === 0) return start > minimum && start < maximum ? [-Infinity, Infinity] : undefined;
+  return [(minimum - start) / delta, (maximum - start) / delta].sort((left, right) => left - right) as [number, number];
 }
 
 function graphRef(kind: GraphRef["kind"], label: string, targetCommitId: string, x: number, y: number, targetX: number, targetY: number, current: boolean, width: number): GraphRef {
