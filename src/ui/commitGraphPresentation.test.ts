@@ -16,6 +16,12 @@ test("empty and linear histories are represented from parent facts", () => {
   assert.deepEqual(result.predictionCommits, []);
 });
 
+test("commit subjects stay within one graph step instead of overlapping adjacent commits", () => {
+  assert.equal(node(graph([commit("a", [], "P13 manual test")]), "a").subject, "P13 manual test");
+  assert.equal(node(graph([commit("a", [], "P12 manual refresh test")]), "a").subject, "P12 manual ref…");
+  assert.equal(node(graph([commit("a", [], "playgroundを初期化")]), "a").subject, "playgroundを初…");
+});
+
 test("branches and all merge parents receive distinct factual edges", () => {
   const result = graph([commit("m", ["c", "d"]), commit("d", ["b"]), commit("c", ["b"]), commit("b", ["a"]), commit("a")]);
   assert.equal(result.nodes.length, 5);
