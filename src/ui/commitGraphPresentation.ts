@@ -53,9 +53,9 @@ export interface GraphRefConnector { readonly fromX: number; readonly fromY: num
 export interface GraphRef { readonly kind: "local" | "remoteTracking"; readonly label: string; readonly targetCommitId: string; readonly x: number; readonly y: number; readonly targetY: number; readonly current: boolean; readonly bounds: GraphRefBounds; readonly connector: GraphRefConnector; readonly visualState?: "selected" | "related"; readonly revealed?: boolean; readonly remoteName?: string; readonly branchName?: string; readonly trackingRef?: string; }
 export interface GraphHead { readonly targetKind: "branch" | "commit"; readonly targetCommitId: string; readonly x: number; readonly y: number; readonly targetY: number; readonly visualState?: "selected" | "related"; }
 
-const X_STEP = 154;
+const X_STEP = 130;
 const Y_STEP = 56;
-const PADDING_X = 40;
+const PADDING_X = 28;
 const PADDING_Y = 32;
 const LOCAL_REF_WIDTH = 96;
 const REF_HEIGHT = 20;
@@ -117,7 +117,7 @@ export function createCommitGraphPresentation(state: RepositoryState): CommitGra
     const currentBranch = localBranches.find((branch) => branch.current);
     const head = state.currentLocation.kind === "branch" && currentBranch ? { targetKind: "branch" as const, targetCommitId: state.currentLocation.head.id, x: currentBranch.x, y: 18, targetY: currentBranch.y - 12 } : state.currentLocation.kind === "detached" && nodeById.has(state.currentLocation.head.id) ? { targetKind: "commit" as const, targetCommitId: state.currentLocation.head.id, x: nodeById.get(state.currentLocation.head.id)!.x, y: 30, targetY: nodeById.get(state.currentLocation.head.id)!.y - 8 } : undefined;
     const refRight = Math.max(0, ...localBranches.map((branch) => branch.bounds.left + branch.bounds.width));
-    return { kind: "graph", nodes, edges, omissions, localBranches, remoteTrackingRefs, head, predictionCommits: [], width: Math.max(PADDING_X * 2 + (maxRank + 1) * X_STEP + 180, refRight + PADDING_X), height: PADDING_Y * 2 + (maxLane + 1) * Y_STEP + 96 };
+    return { kind: "graph", nodes, edges, omissions, localBranches, remoteTrackingRefs, head, predictionCommits: [], width: Math.max(PADDING_X * 2 + (maxRank + 1) * X_STEP + 100, refRight + PADDING_X), height: PADDING_Y * 2 + (maxLane + 1) * Y_STEP + 96 };
   } catch {
     return unavailable();
   }

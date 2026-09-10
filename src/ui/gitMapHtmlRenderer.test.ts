@@ -13,10 +13,10 @@ test("Git Map renderer escapes repository-derived strings and preserves CSP", ()
   assert.ok(html.includes('aria-label="git addは内容をStagingへ記録"'));
   assert.ok(html.includes('aria-label="commitはStaging内容からcommitを作成"'));
   assert.ok(html.includes("あなたは今ここ"));
-  assert.ok(html.includes("HEAD → branch → commit"));
+  assert.ok(html.includes('class="current-location-label"'));
   for (const value of ["fact-state", "unknown-state", "unknown-symbol", "stash-shelf", "prediction-commit", "prediction-node", "Prediction", "NEW COMMIT", "warning-state", "warning-symbol", "selected-state", "related-state", "prefers-reduced-motion"]) assert.ok(html.includes(value));
   assert.ok(!html.includes("future shortId"));
-  assert.ok(html.includes("BASE COMMON ANCESTOR"));
+  assert.ok(html.includes("base / merge-base (common ancestor)"));
   assert.ok(!html.includes(">CURRENT<"));
   assert.ok(!html.includes("BRANCH POINT"));
   assert.ok(!html.includes("BRANCH CREATED HERE"));
@@ -85,15 +85,26 @@ test("Command Preview stays outside Detail, escapes input, and offers analysis o
 });
 
 test("Git Map is one horizontal mental map with history at its center and secondary detail below", () => {
-  const html = renderGitMapHtml(presentation(), "nonce");
+  const html = renderGitMapHtml({ ...presentation(), detailMode: "inspect" }, "nonce");
   const working = html.indexOf('class="map-zone map-working');
   const staging = html.indexOf('class="map-zone map-staging');
   const history = html.indexOf('class="map-zone map-history');
   const remote = html.indexOf('class="map-zone map-remote');
   const detail = html.indexOf('class="detail-pane"');
   assert.ok(working < staging && staging < history && history < remote && remote < detail);
-  for (const value of ["mental-map", "grid-template-columns", "min-width:1210px", "overflow-x:auto", "LOCAL COMMIT HISTORY", "REMOTE CONTEXT"]) assert.ok(html.includes(value));
+  for (const value of ["mental-map", "grid-template-columns", "minmax(0,3fr)", "graph-scroll", "overflow-x:auto", "LOCAL COMMIT HISTORY", "REMOTE CONTEXT"]) assert.ok(html.includes(value));
+  assert.ok(!html.includes("min-width:1210px"));
+  assert.ok(html.includes("remote-trackingは最後に取得した情報です。live Remoteは未確認です。"));
+  assert.ok(html.includes('class="detail-nav"'));
+  assert.ok(html.includes('class="detail-tab detail-tab-active"'));
   assert.ok(!html.includes('class="region"'));
+});
+
+test("current annotation and base roles stay below the current commit labels", () => {
+  const html = renderGitMapHtml(presentation(), "nonce");
+  assert.ok(html.includes('class="graph-role" x="33" y="107">base / merge-base (common ancestor)</text>'));
+  assert.ok(html.includes('class="current-location-label" x="33" y="123">↑ あなたは今ここ</text>'));
+  assert.ok(!html.includes('text-anchor="middle">BASE'));
 });
 
 function presentation(): GitMapPresentation {
