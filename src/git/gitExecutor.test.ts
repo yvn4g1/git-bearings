@@ -683,7 +683,7 @@ function completeFakeChild(
   const child = createFakeChild();
   queueMicrotask(() => {
     child.stdout.end(stdout);
-    child.stderr.end();
+    child.stderr.end(stderr);
     child.emit("close", exitCode);
   });
   return child;
