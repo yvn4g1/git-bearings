@@ -5,10 +5,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import test from "node:test";
+import type { RepositoryState } from "../domain/repositoryState";
+import { createCommitGraphPresentation } from "../ui/commitGraphPresentation";
 import { CoreRepositoryReader } from "./coreRepositoryReader";
 import { GitExecutor, type GitLogger } from "./gitExecutor";
 import { ProcessRunner, type ProcessExecutor, type ProcessRequest, type ProcessResult } from "./processRunner";
-import { createCommitGraphPresentation } from "../ui/commitGraphPresentation";
 
 const execFile = promisify(execFileCallback);
 const silentLogger: GitLogger = { appendLine: () => undefined };
@@ -42,7 +43,16 @@ test("Core reader and Commit Graph include an unmerged local branch without mixi
     assert.equal(ids.has(mainTip), true);
     assert.equal(ids.has(featureTip), true);
 
-    const graph = createCommitGraphPresentation(result.value);
+    const graphState: RepositoryState = {
+      ...result.value,
+      remotes: { kind: "notConfigured" },
+      upstream: { kind: "notConfigured" },
+      stash: { kind: "available", value: [] },
+      comparison: { kind: "notConfigured" },
+      stateVersion: 1,
+      refreshedAt: new Date(0),
+    };
+    const graph = createCommitGraphPresentation(graphState);
     assert.equal(graph.kind, "graph");
     if (graph.kind !== "graph") return;
     assert.deepEqual(graph.localBranches.map((ref) => ref.label).sort(), ["feature/manual-graph-test", "main"]);
