@@ -54,7 +54,7 @@ export interface GraphRef { readonly kind: "local" | "remoteTracking"; readonly 
 export interface GraphHead { readonly targetKind: "branch" | "commit"; readonly targetCommitId: string; readonly x: number; readonly y: number; readonly targetY: number; readonly visualState?: "selected" | "related"; }
 
 const X_STEP = 130;
-const Y_STEP = 56;
+const Y_STEP = 72;
 const PADDING_X = 28;
 const PADDING_Y = 32;
 const LOCAL_REF_WIDTH = 96;
@@ -109,7 +109,10 @@ export function createCommitGraphPresentation(state: RepositoryState): CommitGra
       const target = nodeById.get(targetCommitId)!;
       const isCurrent = (branch: typeof branches[number]) => state.currentLocation.kind === "branch" && branch.name === state.currentLocation.branchName;
       const orderedBranches = [...branches].sort((left, right) => Number(isCurrent(right)) - Number(isCurrent(left)) || left.name.localeCompare(right.name));
-      return orderedBranches.map((branch, index) => localRef(branch.name, targetCommitId, target.x + index * REF_FAN_STEP, REF_Y, target.x, target.y, isCurrent(branch)));
+      return orderedBranches.map((branch, index) => {
+        const current = isCurrent(branch);
+        return localRef(branch.name, targetCommitId, target.x + index * REF_FAN_STEP, current ? REF_Y : target.y + 38, target.x, target.y, current);
+      });
     });
     const trackingFacts = state.remotes.kind !== "available" ? [] : state.remotes.value.flatMap((remote) => remote.trackingRefs.map((ref) => ({ remoteName: remote.name, branchName: ref.branchName, trackingRef: ref.trackingRef, commitId: ref.commitId }))).filter((ref) => nodeById.has(ref.commitId));
     const trackingGroups = new Map<string, typeof trackingFacts>(); for (const ref of trackingFacts) trackingGroups.set(ref.commitId, [...(trackingGroups.get(ref.commitId) ?? []), ref]);
@@ -117,14 +120,16 @@ export function createCommitGraphPresentation(state: RepositoryState): CommitGra
     const currentBranch = localBranches.find((branch) => branch.current);
     const head = state.currentLocation.kind === "branch" && currentBranch ? { targetKind: "branch" as const, targetCommitId: state.currentLocation.head.id, x: currentBranch.x, y: 18, targetY: currentBranch.y - 12 } : state.currentLocation.kind === "detached" && nodeById.has(state.currentLocation.head.id) ? { targetKind: "commit" as const, targetCommitId: state.currentLocation.head.id, x: nodeById.get(state.currentLocation.head.id)!.x, y: 30, targetY: nodeById.get(state.currentLocation.head.id)!.y - 8 } : undefined;
     const refRight = Math.max(0, ...localBranches.map((branch) => branch.bounds.left + branch.bounds.width));
-    return { kind: "graph", nodes, edges, omissions, localBranches, remoteTrackingRefs, head, predictionCommits: [], width: Math.max(PADDING_X * 2 + (maxRank + 1) * X_STEP + 56, refRight + PADDING_X), height: PADDING_Y * 2 + (maxLane + 1) * Y_STEP + 48 };
+    return { kind: "graph", nodes, edges, omissions, localBranches, remoteTrackingRefs, head, predictionCommits: [], width: Math.max(PADDING_X * 2 + (maxRank + 1) * X_STEP + 56, refRight + PADDING_X), height: PADDING_Y * 2 + maxLane * Y_STEP + 104 };
   } catch {
     return unavailable();
   }
 }
 
 function localRef(label: string, targetCommitId: string, x: number, y: number, targetX: number, targetY: number, current: boolean): GraphRef {
-  return graphRef("local", label, targetCommitId, x, y, targetX, targetY, current, LOCAL_REF_WIDTH);
+  const ref = graphRef("local", label, targetCommitId, x, y, targetX, targetY, current, LOCAL_REF_WIDTH);
+  if (y <= targetY) return ref;
+  return { ...ref, connector: { fromX: x, fromY: y - REF_HEIGHT / 2, toX: targetX, toY: targetY + 8 } };
 }
 
 function graphRef(kind: GraphRef["kind"], label: string, targetCommitId: string, x: number, y: number, targetX: number, targetY: number, current: boolean, width: number): GraphRef {
