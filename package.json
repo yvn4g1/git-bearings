@@ -4,6 +4,10 @@
   "description": "A VS Code extension that makes a repository's Git state easier to see.",
   "version": "0.0.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yvn4g1/git-bearings.git"
+  },
   "engines": {
     "vscode": "^1.93.0"
   },
