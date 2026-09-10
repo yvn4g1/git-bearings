@@ -97,6 +97,7 @@ test("Git Map gives Commit History the full upper region and keeps context compa
   assert.ok(html.includes("body { margin:0; padding:8px 10px; line-height:1.25; overflow-x:hidden;"));
   assert.ok(html.includes(".map-scroll { min-width:0; overflow-x:hidden;"));
   assert.ok(html.includes("remote-trackingは最後に取得した情報です。live Remoteは未確認です。"));
+  assert.ok(html.includes(".map-remote > .remote > .unknown-state { display:inline; border:0;"));
   assert.ok(html.includes('class="detail-nav"'));
   assert.ok(html.includes('class="detail-tab detail-tab-active"'));
   assert.ok(!html.includes('class="region"'));
@@ -110,10 +111,13 @@ test("clean context is one line while changed Working Tree retains every fact", 
   for (const value of ["changesあり", "Unstaged</dt><dd>2", "Modified</dt><dd>1", "Untracked</dt><dd>1", "Conflicts</dt><dd>0"]) assert.ok(changed.includes(value));
 });
 
-test("current annotation and base roles stay below the current commit labels", () => {
+test("current annotation is prioritized before base roles below the current commit labels", () => {
   const html = renderGitMapHtml(presentation(), "nonce");
-  assert.ok(html.includes('class="graph-role" x="33" y="107">base / merge-base (common ancestor)</text>'));
-  assert.ok(html.includes('class="current-location-label" x="33" y="123">↑ あなたは今ここ</text>'));
+  const current = '<text class="current-location-label" x="33" y="109">↑ あなたは今ここ</text>';
+  const roles = '<text class="graph-role" x="33" y="125">base / merge-base (common ancestor)</text>';
+  assert.ok(html.includes(current));
+  assert.ok(html.includes(roles));
+  assert.ok(html.indexOf(current) < html.indexOf(roles));
   assert.ok(!html.includes('text-anchor="middle">BASE'));
 });
 
