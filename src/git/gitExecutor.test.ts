@@ -386,6 +386,7 @@ test("GitExecutor rejects near-match comparison commands", async () => {
     ["log", "-z", "--max-count=50", "--topo-order", "--format=%H", "--stdin"],
     ["log", "-z", "--max-count=50", "--topo-order", "--format=format:%H%x00%h%x00%P%x00%s", "--all", "--stdin"],
     ["log", "-z", "--max-count=50", "--topo-order", "--format=format:%H%x00%h%x00%P%x00%s", "--stdin", "HEAD"],
+    ["log", "-z", "--max-count=50", "--topo-order", "--format=format:%H%x00%h%x00%P%x00%s", "HEAD"],
     ["log", "-z", "--max-count=50", "--topo-order", "--format=format:%H%x00%h%x00%P%x00%s", "main"],
     ["log", "-z", "--no-walk", "--format=format:%H%x00%h%x00%P%x00%s", a],
   ];
@@ -461,7 +462,7 @@ test("GitExecutor restricts stdin and applies signature-specific fixed config", 
   await executor.execute(["stash", "list", "--format=%gd%x00%H%x00%gs%x00"], "/repository");
   await executor.execute([
     "log", "-z", "--max-count=50", "--topo-order",
-    "--format=format:%H%x00%h%x00%P%x00%s", "HEAD",
+    "--format=format:%H%x00%h%x00%P%x00%s", "--branches", "HEAD",
   ], "/repository");
 
   assert.deepEqual(processExecutor.requests[0].args.slice(0, 3), ["--no-pager", "-c", "core.fsmonitor="]);
@@ -682,7 +683,7 @@ function completeFakeChild(
   const child = createFakeChild();
   queueMicrotask(() => {
     child.stdout.end(stdout);
-    child.stderr.end(stderr);
+    child.stderr.end();
     child.emit("close", exitCode);
   });
   return child;
