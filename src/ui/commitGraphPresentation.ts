@@ -138,16 +138,20 @@ export function createCommitGraphPresentation(state: RepositoryState): CommitGra
 }
 
 function compactGraphSubject(subject: string): string {
+  const chars = Array.from(subject);
+  const unit = (char: string) => /[\u0000-\u00ff]/.test(char) ? 1 : 2;
+  if (chars.reduce((total, char) => total + unit(char), 0) <= GRAPH_SUBJECT_MAX_UNITS) return subject;
+
   let units = 0;
   let visible = "";
   const limitBeforeEllipsis = GRAPH_SUBJECT_MAX_UNITS - 1;
-  for (const char of Array.from(subject)) {
-    const charUnits = /[\u0000-\u00ff]/.test(char) ? 1 : 2;
-    if (units + charUnits > limitBeforeEllipsis) return `${visible}…`;
+  for (const char of chars) {
+    const charUnits = unit(char);
+    if (units + charUnits > limitBeforeEllipsis) break;
     visible += char;
     units += charUnits;
   }
-  return subject;
+  return `${visible}…`;
 }
 
 function localRef(label: string, targetCommitId: string, x: number, y: number, targetX: number, targetY: number, current: boolean, width: number): GraphRef {
