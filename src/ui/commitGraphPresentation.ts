@@ -117,7 +117,7 @@ export function createCommitGraphPresentation(state: RepositoryState): CommitGra
     const currentBranch = localBranches.find((branch) => branch.current);
     const head = state.currentLocation.kind === "branch" && currentBranch ? { targetKind: "branch" as const, targetCommitId: state.currentLocation.head.id, x: currentBranch.x, y: 18, targetY: currentBranch.y - 12 } : state.currentLocation.kind === "detached" && nodeById.has(state.currentLocation.head.id) ? { targetKind: "commit" as const, targetCommitId: state.currentLocation.head.id, x: nodeById.get(state.currentLocation.head.id)!.x, y: 30, targetY: nodeById.get(state.currentLocation.head.id)!.y - 8 } : undefined;
     const refRight = Math.max(0, ...localBranches.map((branch) => branch.bounds.left + branch.bounds.width));
-    return { kind: "graph", nodes, edges, omissions, localBranches, remoteTrackingRefs, head, predictionCommits: [], width: Math.max(PADDING_X * 2 + (maxRank + 1) * X_STEP + 100, refRight + PADDING_X), height: PADDING_Y * 2 + (maxLane + 1) * Y_STEP + 96 };
+    return { kind: "graph", nodes, edges, omissions, localBranches, remoteTrackingRefs, head, predictionCommits: [], width: Math.max(PADDING_X * 2 + (maxRank + 1) * X_STEP + 56, refRight + PADDING_X), height: PADDING_Y * 2 + (maxLane + 1) * Y_STEP + 96 };
   } catch {
     return unavailable();
   }
