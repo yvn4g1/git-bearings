@@ -20,7 +20,33 @@ test("Goal recommendation jump opens its Goal and category before scrolling to t
   assert.ok(html.indexOf(openCategory) < html.indexOf(scrollTarget));
 });
 
-test("Goal catalog keeps individual Goal details collapsed inside their category", () => {
+test("Goal catalog keeps individual Goal details collapsed and visually subordinate to their category", () => {
+  const html = renderGitMapHtml(availableGoalPresentation(), "nonce");
+
+  const category = '<details class="goal-category"><summary class="goal-category-summary">変更を残したい</summary>';
+  const goal = '<details id="goal-pushCommits" class="overview-section goal-item"><summary class="goal-item-summary">local commitをRemoteへ送りたい</summary>';
+  assert.ok(html.includes(category));
+  assert.ok(html.includes(goal));
+  assert.ok(html.indexOf(category) < html.indexOf(goal));
+  assert.ok(!html.includes('<section id="goal-pushCommits"'));
+  assert.ok(!goal.includes(" open"));
+  assert.ok(html.includes(".goal-category > .goal-category-summary"));
+  assert.ok(html.includes(".goal-category > .goal-item"));
+  assert.ok(html.includes(".goal-item > .goal-item-summary"));
+});
+
+test("Working Tree to Staging guidance has its own wrapping row instead of a narrow separator column", () => {
+  const html = renderGitMapHtml(availableGoalPresentation(), "nonce");
+
+  assert.ok(html.includes("grid-template-columns:minmax(170px,220px) minmax(145px,190px) minmax(320px,1fr)"));
+  assert.ok(html.includes(".map-context-flow { grid-column:1 / 3; grid-row:2;"));
+  assert.ok(html.includes(".map-flow { color:var(--vscode-descriptionForeground); font-weight:700; text-align:center; white-space:normal;"));
+  assert.ok(html.includes("git add → Stagingへ内容を記録"));
+  assert.ok(html.includes("@media (max-width:760px) { .map-context { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }"));
+  assert.ok(html.includes("@media (max-width:520px) { .map-context { grid-template-columns:minmax(0,1fr); }"));
+});
+
+function availableGoalPresentation(): GitMapPresentation {
   const commit = { id: "a".repeat(40), shortId: "aaaaaaa", subject: "test" };
   const state: RepositoryState = {
     repository: { rootPath: "/repo" },
@@ -37,14 +63,5 @@ test("Goal catalog keeps individual Goal details collapsed inside their category
     refreshedAt: new Date(0),
   };
   const snapshot = { kind: "available" as const, repositoryId: "repo", state };
-  const presentation = createGitMapPresentation(snapshot, { kind: "overview" }, { kind: "idle" }, undefined, "goal");
-  const html = renderGitMapHtml(presentation, "nonce");
-
-  const category = "<summary>変更を残したい</summary>";
-  const goal = '<details id="goal-pushCommits" class="overview-section"><summary><strong>local commitをRemoteへ送りたい</strong></summary>';
-  assert.ok(html.includes(category));
-  assert.ok(html.includes(goal));
-  assert.ok(html.indexOf(category) < html.indexOf(goal));
-  assert.ok(!html.includes('<section id="goal-pushCommits"'));
-  assert.ok(!goal.includes(" open"));
-});
+  return createGitMapPresentation(snapshot, { kind: "overview" }, { kind: "idle" }, undefined, "goal");
+}
