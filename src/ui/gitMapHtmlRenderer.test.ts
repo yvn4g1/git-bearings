@@ -81,23 +81,33 @@ test("Command Preview stays outside Detail, escapes input, and offers analysis o
   const map = { workingTree: ["Working Tree → Staging"], staging: ["Staging ← Working Tree"], stash: [], local: ["◌ NEW MERGE COMMITを生成"], predictions: [{ id: "prediction-1", description: "<NEW MERGE COMMIT>", parentCommitIds: [] }], pointers: [], remote: ["STEP 1 fetch", "STEP 2 integrate (rebase)"], warnings: { workingTree: [], staging: [], stash: [], local: ["注意が必要です。"], remote: [] }, unknowns: { workingTree: [], staging: [], stash: [], local: [], remote: [trackingUnknown] } };
   const commandPreview = { active: { rawInput: 'git commit -m "<unsafe>"', repositoryRoot: "/repo", basedOnStateVersion: 1, parse: { kind: "parseFailure" as const, reason: "<unsafe>" } }, stale: false, banner: true, status: "parseFailure" as const, sections: ["一言で何する", "今のあなたの場合", "変わるもの", "変わらないもの", "Git Map Preview", "注意・前提"].map((title) => ({ title: title as "一言で何する", lines: ["<unsafe>"] })), map, history: [{ label: "<unsafe>", stale: false }], examples: ["git add ."] };
   const html = renderGitMapHtml({ ...presentation(), detailMode: "commandInput", commandPreview }, "nonce");
-  assert.ok(html.includes("PREVIEW")); assert.ok(html.includes("Repositoryは変更されていません")); assert.ok(html.includes("STEP 1 fetch")); assert.ok(html.includes("warning-state")); assert.ok(html.includes("unknown-state")); assert.equal((html.match(new RegExp(trackingUnknown, "g")) ?? []).length, 1); assert.ok(html.indexOf("<h2>REMOTE</h2>") < html.indexOf(trackingUnknown)); assert.ok(html.includes("data-command-input")); assert.ok(html.includes("Analyze")); assert.ok(html.includes("&lt;unsafe&gt;")); assert.ok(!html.includes("Execute")); assert.ok(!html.includes("Run"));
+  assert.ok(html.includes("PREVIEW")); assert.ok(html.includes("Repositoryは変更されていません")); assert.ok(html.includes("STEP 1 fetch")); assert.ok(html.includes("warning-state")); assert.ok(html.includes("unknown-state")); assert.equal((html.match(new RegExp(trackingUnknown, "g")) ?? []).length, 1); assert.ok(html.indexOf("<h2>REMOTE / UPSTREAM CONTEXT</h2>") < html.indexOf(trackingUnknown)); assert.ok(html.includes("data-command-input")); assert.ok(html.includes("Analyze")); assert.ok(html.includes("&lt;unsafe&gt;")); assert.ok(!html.includes("Execute")); assert.ok(!html.includes("Run"));
 });
 
-test("Git Map is one horizontal mental map with history at its center and secondary detail below", () => {
+test("Git Map gives Commit History the full upper region and keeps context compact below", () => {
   const html = renderGitMapHtml({ ...presentation(), detailMode: "inspect" }, "nonce");
   const working = html.indexOf('class="map-zone map-working');
   const staging = html.indexOf('class="map-zone map-staging');
   const history = html.indexOf('class="map-zone map-history');
   const remote = html.indexOf('class="map-zone map-remote');
   const detail = html.indexOf('class="detail-pane"');
-  assert.ok(working < staging && staging < history && history < remote && remote < detail);
-  for (const value of ["mental-map", "grid-template-columns", "minmax(0,3fr)", "graph-scroll", "overflow-x:auto", "LOCAL COMMIT HISTORY", "REMOTE CONTEXT"]) assert.ok(html.includes(value));
-  assert.ok(!html.includes("min-width:1210px"));
+  assert.ok(history < working && working < staging && staging < remote && remote < detail);
+  for (const value of ["mental-map", "map-history", "map-context", "graph-scroll", "overflow-x:auto", "LOCAL COMMIT HISTORY", "REMOTE / UPSTREAM CONTEXT", "commit ↑ Local History", "current commit ↔ tracking context"]) assert.ok(html.includes(value));
+  assert.ok(!html.includes("grid-template-columns:minmax(112px,.7fr)"));
+  assert.ok(html.includes("body { margin:0; padding:8px 10px; line-height:1.25; overflow-x:hidden;"));
+  assert.ok(html.includes(".map-scroll { min-width:0; overflow-x:hidden;"));
   assert.ok(html.includes("remote-trackingは最後に取得した情報です。live Remoteは未確認です。"));
   assert.ok(html.includes('class="detail-nav"'));
   assert.ok(html.includes('class="detail-tab detail-tab-active"'));
   assert.ok(!html.includes('class="region"'));
+});
+
+test("clean context is one line while changed Working Tree retains every fact", () => {
+  const clean = renderGitMapHtml(presentation(), "nonce");
+  assert.ok(clean.includes('Working Tree: <strong>clean</strong>'));
+  assert.ok(clean.includes('Staged: <strong>0</strong>'));
+  const changed = renderGitMapHtml({ ...presentation(), workingTree: { kind: "changes", unstagedCount: 2, modifiedCount: 1, untrackedCount: 1, conflictsCount: 0 } }, "nonce");
+  for (const value of ["changesあり", "Unstaged</dt><dd>2", "Modified</dt><dd>1", "Untracked</dt><dd>1", "Conflicts</dt><dd>0"]) assert.ok(changed.includes(value));
 });
 
 test("current annotation and base roles stay below the current commit labels", () => {
