@@ -59,6 +59,7 @@
     "test:command-preview": "npm run compile && node --test out/ui/commandPreview.test.js",
     "test:goal": "npm run compile && node --test out/domain/goal.test.js",
     "test:refresh": "npm run compile && node --test out/repository/repositoryStateRefreshController.test.js out/repository/p26FailureUx.test.js",
+    "test:hardening": "npm run compile && node --test out/repository/p27Hardening.test.js",
     "vscode:prepublish": "npm run compile"
   },
   "devDependencies": {

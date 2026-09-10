@@ -21,6 +21,8 @@ export interface SidebarNode {
   readonly selection?: SelectionState;
 }
 
+export const WORKING_TREE_PATH_LIMIT = 1_000;
+
 export function createSidebarPresentation(snapshot: RepositoryStateSnapshot): readonly SidebarNode[] {
   switch (snapshot.kind) {
     case "empty":
@@ -118,10 +120,26 @@ function comparisonNode(state: RepositoryState): SidebarNode {
 function workingTreeNode(state: RepositoryState): SidebarNode {
   const tree = state.workingTree;
   const groups: SidebarNode[] = [];
-  if (tree.staged.length) groups.push({ ...fileGroup("working:staged", "次のcommitに入る変更", "Staged", tree.staged), selection: { kind: "staging" } });
-  if (tree.unstaged.length) groups.push({ ...fileGroup("working:unstaged", "まだaddしていない変更", "Unstaged", tree.unstaged), selection: { kind: "workingTree", section: "unstaged" } });
-  if (tree.untracked.length) groups.push({ ...group("working:untracked", "未追跡", `Untracked · ${tree.untracked.length}件`, tree.untracked.map((path, index) => leaf(`working:untracked:${index}`, path)), "collapsed"), selection: { kind: "workingTree", section: "untracked" } });
-  if (tree.conflicts.length) groups.push({ ...group("working:conflicts", "競合", `Conflicts · ${tree.conflicts.length}件`, tree.conflicts.map((file, index) => leaf(`working:conflicts:${index}`, file.path, file.kind)), "collapsed"), selection: { kind: "workingTree", section: "conflicts" } });
+  let remaining = WORKING_TREE_PATH_LIMIT;
+  if (tree.staged.length) {
+    const result = fileGroup("working:staged", "次のcommitに入る変更", "Staged", tree.staged, remaining);
+    remaining -= result.displayedCount;
+    groups.push({ ...result.node, selection: { kind: "staging" } });
+  }
+  if (tree.unstaged.length) {
+    const result = fileGroup("working:unstaged", "まだaddしていない変更", "Unstaged", tree.unstaged, remaining);
+    remaining -= result.displayedCount;
+    groups.push({ ...result.node, selection: { kind: "workingTree", section: "unstaged" } });
+  }
+  if (tree.untracked.length) {
+    const result = pathGroup("working:untracked", "未追跡", "Untracked", tree.untracked, remaining);
+    remaining -= result.displayedCount;
+    groups.push({ ...result.node, selection: { kind: "workingTree", section: "untracked" } });
+  }
+  if (tree.conflicts.length) {
+    const result = conflictGroup(tree.conflicts, remaining);
+    groups.push({ ...result.node, selection: { kind: "workingTree", section: "conflicts" } });
+  }
   return { ...group("working", "作業中", groups.length ? "Working Tree" : "変更なし", groups.length ? groups : [leaf("working:clean", "変更なし")]), selection: { kind: "workingTree", section: "overview" } };
 }
 
@@ -171,8 +189,27 @@ function displayBaseRef(state: RepositoryState, baseRef: string): string {
   return baseRef;
 }
 
-function fileGroup(id: string, label: string, description: string, files: readonly FileChange[]): SidebarNode {
-  return group(id, label, `${description} · ${files.length}件`, files.map((file, index) => leaf(`${id}:${index}`, formatFileChange(file), file.kind)), "collapsed");
+function fileGroup(id: string, label: string, description: string, files: readonly FileChange[], limit: number): { readonly node: SidebarNode; readonly displayedCount: number } {
+  const displayed = files.slice(0, limit);
+  return limitedGroup(id, label, description, files.length, displayed.map((file, index) => leaf(`${id}:${index}`, formatFileChange(file), file.kind)));
+}
+
+function pathGroup(id: string, label: string, description: string, paths: readonly string[], limit: number): { readonly node: SidebarNode; readonly displayedCount: number } {
+  const displayed = paths.slice(0, limit);
+  return limitedGroup(id, label, description, paths.length, displayed.map((path, index) => leaf(`${id}:${index}`, path)));
+}
+
+function conflictGroup(files: readonly { readonly path: string; readonly kind: string }[], limit: number): { readonly node: SidebarNode; readonly displayedCount: number } {
+  const displayed = files.slice(0, limit);
+  return limitedGroup("working:conflicts", "競合", "Conflicts", files.length, displayed.map((file, index) => leaf(`working:conflicts:${index}`, file.path, file.kind)));
+}
+
+function limitedGroup(id: string, label: string, description: string, total: number, children: readonly SidebarNode[]): { readonly node: SidebarNode; readonly displayedCount: number } {
+  const omitted = total - children.length;
+  return {
+    node: group(id, label, `${description} · ${total}件`, omitted === 0 ? children : [...children, leaf(`${id}:omitted`, `残り ${omitted} 件は省略`)], "collapsed"),
+    displayedCount: children.length,
+  };
 }
 
 function formatFileChange(file: FileChange): string {
