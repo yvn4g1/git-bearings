@@ -57,6 +57,7 @@ const X_STEP = 130;
 const Y_STEP = 72;
 const PADDING_X = 28;
 const PADDING_Y = 32;
+const GRAPH_SUBJECT_MAX_UNITS = 15;
 const LOCAL_REF_MIN_WIDTH = 96;
 const LOCAL_REF_MAX_WIDTH = 220;
 const LOCAL_REF_CHAR_WIDTH = 7;
@@ -90,7 +91,7 @@ export function createCommitGraphPresentation(state: RepositoryState): CommitGra
       if (commitId === currentId) roles.push("current");
       if (commitId === baseId) roles.push("base");
       if (commitId === mergeBaseId) roles.push("mergeBase");
-      return { commitId, shortId: entry.shortId, subject: entry.subject, x: PADDING_X + ranks.get(commitId)! * X_STEP, y: PADDING_Y + lanes.get(commitId)! * Y_STEP + 72, roles };
+      return { commitId, shortId: entry.shortId, subject: compactGraphSubject(entry.subject), x: PADDING_X + ranks.get(commitId)! * X_STEP, y: PADDING_Y + lanes.get(commitId)! * Y_STEP + 72, roles };
     });
     const nodeById = new Map(nodes.map((node) => [node.commitId, node]));
     const edges: CommitGraphEdge[] = [];
@@ -134,6 +135,19 @@ export function createCommitGraphPresentation(state: RepositoryState): CommitGra
   } catch {
     return unavailable();
   }
+}
+
+function compactGraphSubject(subject: string): string {
+  let units = 0;
+  let visible = "";
+  const limitBeforeEllipsis = GRAPH_SUBJECT_MAX_UNITS - 1;
+  for (const char of Array.from(subject)) {
+    const charUnits = /[\u0000-\u00ff]/.test(char) ? 1 : 2;
+    if (units + charUnits > limitBeforeEllipsis) return `${visible}…`;
+    visible += char;
+    units += charUnits;
+  }
+  return subject;
 }
 
 function localRef(label: string, targetCommitId: string, x: number, y: number, targetX: number, targetY: number, current: boolean, width: number): GraphRef {
