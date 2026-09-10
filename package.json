@@ -58,7 +58,7 @@
     "test:git-map": "npm run compile && node --test out/ui/commitGraphPresentation.test.js out/ui/gitMapPresentation.test.js out/ui/gitMapHtmlRenderer.test.js out/ui/gitMapMessage.test.js",
     "test:command-preview": "npm run compile && node --test out/ui/commandPreview.test.js",
     "test:goal": "npm run compile && node --test out/domain/goal.test.js",
-    "test:refresh": "npm run compile && node --test out/repository/repositoryStateRefreshController.test.js",
+    "test:refresh": "npm run compile && node --test out/repository/repositoryStateRefreshController.test.js out/repository/p26FailureUx.test.js",
     "vscode:prepublish": "npm run compile"
   },
   "devDependencies": {

@@ -2,7 +2,7 @@ import type { AvailabilityResult, RepositoryState } from "../domain/repositorySt
 import type { SavedBase } from "./baseResolver";
 import type { RepositoryStateMetadata } from "./repositoryStateComposer";
 import type { RepositoryCandidate } from "./repositorySelection";
-import { RepositoryStateSnapshotStore } from "../ui/repositoryStateSnapshot";
+import { RepositoryStateSnapshotStore, type RepositoryStateFailure } from "../ui/repositoryStateSnapshot";
 
 export interface RefreshTimer { dispose(): void; }
 export interface RefreshScheduler { schedule(delayMs: number, callback: () => void): RefreshTimer; }
@@ -11,6 +11,8 @@ export interface RepositoryStateRefreshControllerDependencies {
   readonly getSavedBase: (repositoryId: string) => SavedBase | undefined;
   readonly read: (repositoryPath: string, savedBase: SavedBase | undefined, metadata: RepositoryStateMetadata) => Promise<AvailabilityResult<RepositoryState>>;
   readonly snapshotStore: RepositoryStateSnapshotStore;
+  readonly getFailure?: () => RepositoryStateFailure;
+  readonly onUnavailable?: (reason: string) => void;
   readonly now?: () => Date;
   readonly scheduler?: RefreshScheduler;
 }
@@ -78,7 +80,9 @@ export class RepositoryStateRefreshController {
         this.version += 1;
         this.dependencies.snapshotStore.set({ kind: "available", repositoryId: target.id, state: result.value });
       } else {
-        this.dependencies.snapshotStore.set({ kind: "unavailable", repositoryId: target.id, rootPath: target.rootPath, reason: result.reason });
+        const failure = this.dependencies.getFailure?.() ?? { kind: "coreReadFailure" as const };
+        this.dependencies.snapshotStore.set({ kind: "unavailable", repositoryId: target.id, rootPath: target.rootPath, reason: result.reason, failure });
+        this.dependencies.onUnavailable?.(result.reason);
       }
     }
     if (this.active === active) this.active = undefined;

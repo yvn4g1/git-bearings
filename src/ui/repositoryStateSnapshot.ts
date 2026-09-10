@@ -1,10 +1,14 @@
 import type { RepositoryState } from "../domain/repositoryState";
 
+export type RepositoryStateFailure =
+  | { readonly kind: "coreReadFailure" }
+  | { readonly kind: "unsupportedGitVersion"; readonly version: string };
+
 export type RepositoryStateSnapshot =
   | { readonly kind: "empty"; readonly reason?: "initial" | "noRepository" }
   | { readonly kind: "loading"; readonly repositoryId: string; readonly rootPath: string }
   | { readonly kind: "available"; readonly repositoryId: string; readonly state: RepositoryState }
-  | { readonly kind: "unavailable"; readonly repositoryId: string; readonly rootPath: string; readonly reason: string };
+  | { readonly kind: "unavailable"; readonly repositoryId: string; readonly rootPath: string; readonly reason: string; readonly failure?: RepositoryStateFailure };
 
 export class RepositoryStateSnapshotStore {
   private snapshot: RepositoryStateSnapshot = { kind: "empty" };

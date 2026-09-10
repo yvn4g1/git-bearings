@@ -23,9 +23,29 @@ export interface SidebarNode {
 
 export function createSidebarPresentation(snapshot: RepositoryStateSnapshot): readonly SidebarNode[] {
   switch (snapshot.kind) {
-    case "empty": return [leaf("empty", "Git状態をまだ読み取っていません")];
+    case "empty":
+      return snapshot.reason === "noRepository"
+        ? [
+          leaf("empty:no-repository", "このworkspaceではGit Repositoryが見つかっていません"),
+          leaf("empty:no-repository-help", "Git Bearingsは既存Repositoryの状態を読み取るツールです。"),
+        ]
+        : [leaf("empty", "Git状態をまだ読み取っていません")];
     case "loading": return [repositoryNode(snapshot.rootPath), leaf("loading", "Git状態を読み取り中…")];
-    case "unavailable": return [repositoryNode(snapshot.rootPath), leaf("unavailable", "Git状態を安全に取得できません", undefined, snapshot.reason)];
+    case "unavailable": {
+      const repository = {
+        ...repositoryNode(snapshot.rootPath),
+        description: "Git Bearings Outputを開く",
+        tooltip: `${snapshot.rootPath}\nGit Bearings Outputを開く`,
+        command: { command: "gitBearings.showOutput", title: "Git Bearings: Outputを開く" },
+      };
+      const summary = snapshot.failure?.kind === "unsupportedGitVersion"
+        ? leaf("unavailable", "Git BearingsはGit 2.23以降を必要とします", `現在: Git ${snapshot.failure.version} · 再読み込み`, snapshot.reason)
+        : leaf("unavailable", "Git状態を安全に取得できません", "再読み込み", snapshot.reason);
+      return [
+        repository,
+        { ...summary, command: { command: "gitBearings.refresh", title: "Git Bearings: Git状態を再読み込み" } },
+      ];
+    }
     case "available": return availablePresentation(snapshot.state);
   }
 }
@@ -166,6 +186,7 @@ function group(id: string, label: string, description: string | undefined, child
 function leaf(id: string, label: string, description?: string, tooltip?: string): SidebarNode {
   return { id, label, description, tooltip, collapsible: "none" };
 }
+
 
 function selectable(id: string, label: string, selection: SelectionState, description?: string, tooltip?: string): SidebarNode {
   return { ...leaf(id, label, description, tooltip), selection };

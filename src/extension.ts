@@ -17,7 +17,7 @@ import { BranchComparisonReader } from "./git/branchComparisonReader";
 import { RepositoryStateReader } from "./repository/repositoryStateReader";
 import { BasePreferenceController, BASE_PREFERENCE_KEY } from "./repository/basePreference";
 import { createBaseSelectionCandidates } from "./repository/baseSelection";
-import { RepositoryStateSnapshotStore } from "./ui/repositoryStateSnapshot";
+import { RepositoryStateSnapshotStore, type RepositoryStateFailure } from "./ui/repositoryStateSnapshot";
 import { RepositoryStateRefreshController } from "./repository/repositoryStateRefreshController";
 import { CommitDetailReader } from "./git/commitDetailReader";
 import { CommitDetailController } from "./ui/commitDetailController";
@@ -46,10 +46,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     },
   });
   const gitResolution = await resolveVscodeGitExecutable(vscode.extensions);
-  const gitUnavailableReason = gitResolution.kind === "unavailable" ? gitResolution.reason : undefined;
-  const readers = gitResolution.kind === "available"
-    ? createReaders(gitResolution.path, outputChannel)
-    : undefined;
+  let gitUnavailableReason: string | undefined;
+  let gitFailure: RepositoryStateFailure = { kind: "coreReadFailure" };
+  let readers: ReturnType<typeof createReaders> | undefined;
+  if (gitResolution.kind === "available") {
+    const executor = new GitExecutor(gitResolution.path, new ProcessRunner(), outputChannel);
+    const version = await executor.checkVersion();
+    if (version.kind === "supported") {
+      readers = createReaders(executor);
+    } else if (version.kind === "unsupported") {
+      const versionLabel = formatGitVersion(version.version);
+      gitUnavailableReason = `Git ${versionLabel} is below Git Bearings minimum supported version 2.23.`;
+      gitFailure = { kind: "unsupportedGitVersion", version: versionLabel };
+    } else {
+      gitUnavailableReason = version.reason;
+    }
+  } else {
+    gitUnavailableReason = gitResolution.reason;
+  }
   const stateReader = readers?.stateReader;
   const commitDetails = new CommitDetailController({
     read: (repositoryPath, commitId) => readers
@@ -69,6 +83,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       ? stateReader.read(repositoryPath, savedBase, metadata)
       : Promise.resolve({ kind: "unavailable", reason: gitUnavailableReason ?? "Git executable is unavailable." }),
     snapshotStore,
+    getFailure: () => gitFailure,
+    onUnavailable: (reason) => outputChannel.appendLine(`Git Bearings state: ${reason}`),
   });
   const source = new VscodeGitRepositorySource(
     () => getGitApi(),
@@ -116,10 +132,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     const current = selection.currentState;
     if (current.kind !== "selected" || current.repository.id !== selected.repository.id || current.repository.rootPath !== selected.repository.rootPath) return;
     await basePreference.save(selected.repository.id, picked.savedBase);
-    const refreshed = await refreshController.refreshNow();
-    if (refreshed?.kind === "unavailable") {
-      outputChannel.appendLine(`Git Bearings state: ${refreshed.reason}`);
-    }
+    await refreshController.refreshNow();
   };
 
   context.subscriptions.push(
@@ -135,13 +148,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         await vscode.window.showInformationMessage("先にGit BearingsのRepositoryを選択してください。");
         return;
       }
-      const refreshed = await refreshController?.refreshNow();
-      if (refreshed?.kind === "unavailable") outputChannel.appendLine(`Git Bearings state: ${refreshed.reason}`);
+      await refreshController?.refreshNow();
     }),
+    vscode.commands.registerCommand("gitBearings.showOutput", () => outputChannel.show(true)),
     registerOpenGitBearingsCommand(outputChannel, async () => {
       if (selection.currentState.kind === "selectionRequired") await selectRepository();
-      const state = await refreshController.refreshNow();
-      if (state?.kind === "unavailable") outputChannel.appendLine(`Git Bearings state: ${state.reason}`);
+      await refreshController.refreshNow();
       await vscode.commands.executeCommand(
         "setContext",
         "gitBearings.uiOpened",
@@ -154,8 +166,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   await source.initialize();
 }
 
-function createReaders(gitPath: string, logger: { appendLine(value: string): void }): { readonly stateReader: RepositoryStateReader; readonly commitDetailReader: CommitDetailReader } {
-  const executor = new GitExecutor(gitPath, new ProcessRunner(), logger);
+function createReaders(executor: GitExecutor): { readonly stateReader: RepositoryStateReader; readonly commitDetailReader: CommitDetailReader } {
   return {
     stateReader: new RepositoryStateReader(
       new CoreRepositoryReader(executor),
@@ -164,6 +175,10 @@ function createReaders(gitPath: string, logger: { appendLine(value: string): voi
     ),
     commitDetailReader: new CommitDetailReader(executor),
   };
+}
+
+function formatGitVersion(version: { readonly major: number; readonly minor: number; readonly patch: number }): string {
+  return `${version.major}.${version.minor}.${version.patch}`;
 }
 
 async function getGitApi(): Promise<GitApiLike> {
