@@ -10,10 +10,10 @@ test("Git Map renderer escapes repository-derived strings and preserves CSP", ()
   assert.ok(html.includes("&lt;img src=x&gt;"));
   assert.ok(!html.includes("<script>"));
   assert.ok(!html.includes("fixture"));
-  assert.ok(html.includes("↓ git add：内容をStagingへ記録"));
-  assert.ok(html.includes("↓ commit：Staging内容からcommitを作成"));
-  assert.ok(!html.includes(">↓ add<"));
-  assert.ok(!html.includes(">↓ commit<"));
+  assert.ok(html.includes('aria-label="git addは内容をStagingへ記録"'));
+  assert.ok(html.includes('aria-label="commitはStaging内容からcommitを作成"'));
+  assert.ok(html.includes("あなたは今ここ"));
+  assert.ok(html.includes("HEAD → branch → commit"));
   for (const value of ["fact-state", "unknown-state", "unknown-symbol", "stash-shelf", "prediction-commit", "prediction-node", "Prediction", "NEW COMMIT", "warning-state", "warning-symbol", "selected-state", "related-state", "prefers-reduced-motion"]) assert.ok(html.includes(value));
   assert.ok(!html.includes("future shortId"));
   assert.ok(html.includes("BASE COMMON ANCESTOR"));
@@ -40,7 +40,7 @@ test("renderer emits hidden ref grammar and unborn state without injection", () 
 
 test("renderer applies presentation selection state to actual elements", () => {
   const html = renderGitMapHtml({ ...presentation(), detailIdentity: "Remote & <origin>", workingTree: { ...presentation().workingTree, visualState: "selected" }, staging: { stagedCount: 1, visualState: "related" }, stash: { kind: "shelf", count: 1, visualState: "selected" }, upstreamSelection: { remoteName: "origin", branchName: "main" }, upstreamVisualState: "selected", remotes: [{ ...presentation().remotes[0], visualState: "selected" }], graph: { ...presentation().graph, remoteTrackingRefs: [{ kind: "remoteTracking", label: "origin/main", targetCommitId: "id", x: 20, y: 110, targetY: 80, current: false, bounds: { left: -32, top: 100, width: 104, height: 20 }, connector: { fromX: 20, fromY: 120, toX: 20, toY: 72 }, revealed: true, visualState: "related" }] } }, "nonce");
-  assert.ok(html.includes('region fact-state selected-state')); assert.ok(html.includes('staging fact-state related-state'));
+  assert.ok(html.includes('map-working fact-state selected-state')); assert.ok(html.includes('map-staging staging fact-state related-state'));
   assert.ok(html.includes('stash-shelf fact-state selected-state')); assert.ok(html.includes('remote-tracking-ref related-state'));
   assert.ok(html.includes('&quot;kind&quot;:&quot;upstream&quot;')); assert.ok(html.includes('data-primary-selection="true"'));
   assert.ok(html.includes("選択中: Remote &amp; &lt;origin&gt;"));
@@ -52,7 +52,9 @@ test("Detail renders selected explanation in two levels and escapes its facts", 
   assert.ok(html.includes("現在 &lt;fact&gt;"));
   assert.ok(html.includes("もっと詳しく"));
   assert.ok(html.includes("concept &lt;detail&gt;"));
-  assert.ok(html.includes('<details open><summary>Detail</summary>'));
+  assert.ok(html.includes('<section class="detail-pane">'));
+  assert.ok(html.includes('<details class="detail-content"><summary>Detail / Command Preview / Goal</summary>'));
+  assert.ok(!html.includes('<details class="detail-content" open'));
   assert.ok(!html.includes("type:'explain'"));
 });
 
@@ -80,6 +82,18 @@ test("Command Preview stays outside Detail, escapes input, and offers analysis o
   const commandPreview = { active: { rawInput: 'git commit -m "<unsafe>"', repositoryRoot: "/repo", basedOnStateVersion: 1, parse: { kind: "parseFailure" as const, reason: "<unsafe>" } }, stale: false, banner: true, status: "parseFailure" as const, sections: ["一言で何する", "今のあなたの場合", "変わるもの", "変わらないもの", "Git Map Preview", "注意・前提"].map((title) => ({ title: title as "一言で何する", lines: ["<unsafe>"] })), map, history: [{ label: "<unsafe>", stale: false }], examples: ["git add ."] };
   const html = renderGitMapHtml({ ...presentation(), detailMode: "commandInput", commandPreview }, "nonce");
   assert.ok(html.includes("PREVIEW")); assert.ok(html.includes("Repositoryは変更されていません")); assert.ok(html.includes("STEP 1 fetch")); assert.ok(html.includes("warning-state")); assert.ok(html.includes("unknown-state")); assert.equal((html.match(new RegExp(trackingUnknown, "g")) ?? []).length, 1); assert.ok(html.indexOf("<h2>REMOTE</h2>") < html.indexOf(trackingUnknown)); assert.ok(html.includes("data-command-input")); assert.ok(html.includes("Analyze")); assert.ok(html.includes("&lt;unsafe&gt;")); assert.ok(!html.includes("Execute")); assert.ok(!html.includes("Run"));
+});
+
+test("Git Map is one horizontal mental map with history at its center and secondary detail below", () => {
+  const html = renderGitMapHtml(presentation(), "nonce");
+  const working = html.indexOf('class="map-zone map-working');
+  const staging = html.indexOf('class="map-zone map-staging');
+  const history = html.indexOf('class="map-zone map-history');
+  const remote = html.indexOf('class="map-zone map-remote');
+  const detail = html.indexOf('class="detail-pane"');
+  assert.ok(working < staging && staging < history && history < remote && remote < detail);
+  for (const value of ["mental-map", "grid-template-columns", "min-width:1210px", "overflow-x:auto", "LOCAL COMMIT HISTORY", "REMOTE CONTEXT"]) assert.ok(html.includes(value));
+  assert.ok(!html.includes('class="region"'));
 });
 
 function presentation(): GitMapPresentation {
