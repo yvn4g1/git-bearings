@@ -21,7 +21,9 @@ export class RepositoryStateSnapshotStore {
     for (const listener of this.listeners) listener(snapshot);
   }
 
-  clear(reason: "initial" | "noRepository" = "initial"): void { this.set({ kind: "empty", reason }); }
+  clear(reason: "initial" | "noRepository" = "initial"): void {
+    this.set(reason === "noRepository" ? { kind: "empty", reason } : { kind: "empty" });
+  }
 
   onDidChange(listener: (snapshot: RepositoryStateSnapshot) => void): { dispose(): void } {
     this.listeners.add(listener);
