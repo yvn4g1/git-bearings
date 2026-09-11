@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
 import test from "node:test";
 import type { RepositoryState } from "../domain/repositoryState";
+import type { CommandPreviewPresentation } from "./commandPreview";
 import { createGitMapPresentation } from "./gitMapPresentation";
 
 const oid = "a".repeat(40);
@@ -64,6 +65,44 @@ test("base configuration is left to the detail layer without guessing", () => {
   const map = presentation({ comparison: { kind: "notConfigured" } });
   assert.equal(map.detailSnapshot.kind, "available");
   assert.equal((map.detailSnapshot as { state: RepositoryState }).state.comparison.kind, "notConfigured");
+});
+
+test("Prediction placement stays compact and is not pushed by long branch labels", () => {
+  const baseCommit = { id: "b".repeat(40), shortId: "bbbbbbb", subject: "base" };
+  const featureCommit = { id: "c".repeat(40), shortId: "ccccccc", subject: "feature" };
+  const branchName = "feature/very-long-branch-name-for-preview-spacing";
+  const state: RepositoryState = {
+    ...baseState(),
+    currentLocation: { kind: "branch", branchName, head: featureCommit, detached: false },
+    localBranches: [{ name: branchName, tipCommitId: featureCommit.id }, { name: "main", tipCommitId: baseCommit.id }],
+    history: [{ commit: baseCommit, parentIds: [] }, { commit: featureCommit, parentIds: [baseCommit.id] }],
+  };
+  const regionNotes = { workingTree: [], staging: [], stash: [], local: [], remote: [] };
+  const preview: CommandPreviewPresentation = {
+    active: null,
+    stale: false,
+    banner: true,
+    status: "supported",
+    sections: [],
+    history: [],
+    examples: [],
+    map: {
+      workingTree: [], staging: [], stash: [], local: [], remote: [], warnings: regionNotes, unknowns: regionNotes,
+      predictions: [
+        { id: "prediction-1", description: "first", parentCommitIds: [baseCommit.id] },
+        { id: "prediction-2", description: "second", parentCommitIds: [], basedOn: { kind: "prediction", id: "prediction-1" } },
+      ],
+      pointers: [],
+    },
+  };
+  const map = createGitMapPresentation({ kind: "available", repositoryId: "repo", state }, { kind: "overview" }, { kind: "idle" }, preview);
+  assert.equal(map.graph.kind, "graph");
+  const factRight = Math.max(...map.graph.nodes.map((node) => node.x));
+  assert.equal(map.graph.predictionCommits?.[0]?.x, factRight + 118);
+  assert.equal((map.graph.predictionCommits?.[1]?.x ?? 0) - (map.graph.predictionCommits?.[0]?.x ?? 0), 130);
+  const currentRef = map.graph.localBranches.find((ref) => ref.current);
+  assert.ok(currentRef);
+  assert.ok(currentRef.bounds.left + currentRef.bounds.width > (map.graph.predictionCommits?.[0]?.x ?? Number.POSITIVE_INFINITY));
 });
 
 test("selection visual state keeps semantic targets in presentation", () => {
