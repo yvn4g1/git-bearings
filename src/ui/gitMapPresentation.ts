@@ -58,10 +58,33 @@ function previewGraph(graph: CommitGraphPresentation, preview: CommandPreviewPre
   const factRight = Math.max(0, ...graph.nodes.map((node) => node.x));
   const predictionStep = 130;
   let nextX = factRight + 118;
-  const predictionCommits = preview.map.predictions.map((item, index) => { const parents = item.parentCommitIds.map((id) => facts.get(id)).filter((item): item is NonNullable<typeof item> => item !== undefined); const basedOn = item.basedOn ? (item.basedOn.kind === "existing" ? facts.get(item.basedOn.id) : predictions.get(item.basedOn.id)) : undefined; const anchor = parents[0] ?? basedOn; const point = { x: Math.max(anchor ? anchor.x + predictionStep : nextX, nextX), y: anchor ? anchor.y + (item.basedOn ? 34 : 0) : 48 + index * 34 }; nextX = point.x + predictionStep; predictions.set(item.id, point); return { id: item.id, label: "Prediction" as const, description: item.description, ...point, visualState: "related" as const }; });
-  const predictionEdges = preview.map.predictions.flatMap((item) => { const target = predictions.get(item.id)!; const existing = item.parentCommitIds.map((id) => facts.get(id)).filter((item): item is NonNullable<typeof item> => item !== undefined).map((from) => ({ fromX: from.x, fromY: from.y, toX: target.x, toY: target.y })); const basedOn = item.basedOn ? (item.basedOn.kind === "existing" ? facts.get(item.basedOn.id) : predictions.get(item.basedOn.id)) : undefined; return [...existing, ...(basedOn ? [{ fromX: basedOn.x, fromY: basedOn.y, toX: target.x, toY: target.y }] : [])]; });
+  const predictionCommits = preview.map.predictions.map((item, index) => {
+    const parents = item.parentCommitIds.map((id) => facts.get(id)).filter((item): item is NonNullable<typeof item> => item !== undefined);
+    const basedOn = item.basedOn ? (item.basedOn.kind === "existing" ? facts.get(item.basedOn.id) : predictions.get(item.basedOn.id)) : undefined;
+    const anchor = parents[0] ?? basedOn;
+    const rewritten = item.rewrittenFromCommitId !== undefined && basedOn !== undefined;
+    const point = rewritten
+      ? { x: basedOn.x + predictionStep, y: basedOn.y }
+      : { x: Math.max(anchor ? anchor.x + predictionStep : nextX, nextX), y: anchor ? anchor.y + (item.basedOn ? 34 : 0) : 48 + index * 34 };
+    nextX = Math.max(nextX, point.x + predictionStep);
+    predictions.set(item.id, point);
+    return { id: item.id, label: "Prediction" as const, description: item.description, ...point, visualState: "related" as const };
+  });
+  const predictionEdges = preview.map.predictions.flatMap((item) => {
+    const target = predictions.get(item.id)!;
+    const existing = item.parentCommitIds.map((id) => facts.get(id)).filter((item): item is NonNullable<typeof item> => item !== undefined).map((from) => ({ fromX: from.x, fromY: from.y, toX: target.x, toY: target.y }));
+    const basedOn = item.basedOn ? (item.basedOn.kind === "existing" ? facts.get(item.basedOn.id) : predictions.get(item.basedOn.id)) : undefined;
+    return [...existing, ...(basedOn ? [{ fromX: basedOn.x, fromY: basedOn.y, toX: target.x, toY: target.y }] : [])];
+  });
+  const rewriteEdges = preview.map.predictions.flatMap((item) => {
+    if (!item.rewrittenFromCommitId) return [];
+    const from = facts.get(item.rewrittenFromCommitId);
+    const target = predictions.get(item.id);
+    return from && target ? [{ fromX: from.x, fromY: from.y, toX: target.x, toY: target.y }] : [];
+  });
+  const rewrittenOriginalCommitIds = preview.map.predictions.flatMap((item) => item.rewrittenFromCommitId ? [item.rewrittenFromCommitId] : []);
   const predictionPointers = preview.map.pointers.flatMap((pointer, index) => { const target = pointer.target.kind === "existing" ? facts.get(pointer.target.id) : predictions.get(pointer.target.id); if (!target) return []; const factualRefRight = pointer.kind === "branch" && pointer.target.kind === "existing" ? Math.max(target.x, ...graph.localBranches.filter((ref) => ref.targetCommitId === pointer.target.id).map((ref) => ref.bounds.left + ref.bounds.width + 52)) : target.x; return [{ label: pointer.label, x: factualRefRight, y: target.y - (pointer.kind === "branch" ? 48 : 78) - index * 18, toX: target.x, toY: target.y - 9, kind: pointer.kind }]; });
-  return { ...graph, predictionCommits, predictionEdges, predictionPointers, width: Math.max(graph.width, nextX + 28, ...predictionPointers.map((pointer) => pointer.x + 52)) };
+  return { ...graph, predictionCommits, predictionEdges, rewriteEdges, rewrittenOriginalCommitIds, predictionPointers, width: Math.max(graph.width, nextX + 28, ...predictionPointers.map((pointer) => pointer.x + 52)) };
 }
 
 function unavailable(snapshot: Exclude<RepositoryStateSnapshot, { kind: "available" }>, message: string, reason?: string): GitMapPresentation {
@@ -91,7 +114,7 @@ function selectionIdentity(selection: SelectionState): string {
 
 function stashPresentation(state: RepositoryState): StashPresentation {
   if (state.stash.kind === "unavailable") return { kind: "unavailable", reason: state.stash.reason };
-  return state.stash.value.length ? { kind: "shelf", count: state.stash.value.length } : { kind: "none" };
+  return state.stash.value.length ? { kind: "shelf", count: state.value.length } : { kind: "none" };
 }
 
 function remoteFacts(state: RepositoryState, selection: SelectionState): Pick<GitMapPresentation, "remotes" | "remoteMessage" | "remoteUnavailableReason" | "upstream" | "upstreamUnavailableReason" | "upstreamSelection"> {
