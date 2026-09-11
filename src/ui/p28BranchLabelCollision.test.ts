@@ -61,8 +61,66 @@ test("branch labels use vertical slots near their own commits instead of stretch
     assert.equal(boundsOverlap(branch.bounds, currentContext), false, `${branch.label} overlaps current-location context`);
   }
 
+  assertNoBranchLabelOverlapsCommitText(result.localBranches, result.nodes);
   assert.equal(result.localBranches.find((branch) => branch.current)?.label, "main");
 });
+
+test("crowded branch labels avoid commit hash and subject text without moving unrelated branches sideways", () => {
+  const history = [
+    historyCommit("a"),
+    historyCommit("b", "a"),
+    historyCommit("c", "b"),
+    historyCommit("d", "c"),
+    historyCommit("e", "c"),
+    historyCommit("f", "c"),
+    historyCommit("k", "d"),
+    historyCommit("g", "e"),
+    historyCommit("h", "f"),
+  ];
+  const current = history[3].commit;
+  const state: RepositoryState = {
+    repository: { rootPath: "/repo" },
+    currentLocation: { kind: "branch", branchName: "main", head: current, detached: false },
+    localBranches: [
+      { name: "main", tipCommitId: current.id },
+      { name: "release/very-long-layout-branch", tipCommitId: history[6].commit.id },
+      { name: "feature/very-long-layout-branch", tipCommitId: history[4].commit.id },
+      { name: "hotfix/very-long-layout-branch", tipCommitId: history[7].commit.id },
+    ],
+    workingTree: { staged: [], unstaged: [], untracked: [], conflicts: [] },
+    history,
+    operation: { kind: "normal" },
+    remotes: { kind: "available", value: [] },
+    upstream: { kind: "notConfigured" },
+    stash: { kind: "available", value: [] },
+    comparison: { kind: "notConfigured" },
+    stateVersion: 1,
+    refreshedAt: new Date(0),
+  };
+
+  const result = createCommitGraphPresentation(state);
+  assert.equal(result.kind, "graph");
+  assert.equal(result.localBranches.length, 4);
+  assertNoBranchLabelOverlapsCommitText(result.localBranches, result.nodes);
+
+  for (const branch of result.localBranches) {
+    const target = result.nodes.find((node) => node.commitId === branch.targetCommitId);
+    assert.ok(target);
+    assert.equal(branch.x, target.x, `${branch.label} moved sideways away from its tip commit`);
+  }
+});
+
+function assertNoBranchLabelOverlapsCommitText(
+  branches: readonly { readonly label: string; readonly bounds: GraphRefBounds }[],
+  nodes: readonly { readonly shortId: string; readonly x: number; readonly y: number }[],
+): void {
+  for (const branch of branches) {
+    for (const node of nodes) {
+      const nodeText: GraphRefBounds = { left: node.x + 9, top: node.y - 18, width: 118, height: 38 };
+      assert.equal(boundsOverlap(branch.bounds, nodeText), false, `${branch.label} overlaps commit text ${node.shortId}`);
+    }
+  }
+}
 
 function boundsOverlap(left: GraphRefBounds, right: GraphRefBounds): boolean {
   return left.left < right.left + right.width
