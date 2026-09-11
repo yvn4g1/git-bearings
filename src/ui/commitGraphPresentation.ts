@@ -215,10 +215,7 @@ function placeLocalBranches(state: RepositoryState, nodeById: ReadonlyMap<string
 }
 
 function localRefIsSafe(ref: GraphRef, placed: readonly GraphRef[], reserved: readonly GraphRefBounds[]): boolean {
-  const obstacles = [...placed.map((item) => item.bounds), ...reserved];
-  if (obstacles.some((bounds) => boundsOverlap(ref.bounds, bounds))) return false;
-  if (reserved.some((bounds) => connectorIntersectsBounds(ref.connector, bounds))) return false;
-  return !placed.some((item) => connectorIntersectsBounds(ref.connector, item.bounds) || connectorIntersectsBounds(item.connector, ref.bounds));
+  return ![...placed.map((item) => item.bounds), ...reserved].some((bounds) => boundsOverlap(ref.bounds, bounds));
 }
 
 function localRef(label: string, targetCommitId: string, x: number, y: number, targetX: number, targetY: number, current: boolean, width: number): GraphRef {
