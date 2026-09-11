@@ -66,7 +66,7 @@ const REF_HEIGHT = 20;
 const REF_Y = 48;
 const REF_FAN_STEP = 112;
 const REF_GAP = 12;
-const REF_ABOVE_OFFSET = 34;
+const REF_VERTICAL_OFFSETS = [38, -34, 62, -58] as const;
 const CURRENT_CONTEXT_LEFT_OFFSET = 9;
 const CURRENT_CONTEXT_TOP_OFFSET = 18;
 const CURRENT_CONTEXT_WIDTH = 230;
@@ -121,7 +121,8 @@ export function createCommitGraphPresentation(state: RepositoryState): CommitGra
     const currentBranch = localBranches.find((branch) => branch.current);
     const head = state.currentLocation.kind === "branch" && currentBranch ? { targetKind: "branch" as const, targetCommitId: state.currentLocation.head.id, x: currentBranch.x, y: 18, targetY: currentBranch.y - 12 } : state.currentLocation.kind === "detached" && nodeById.has(state.currentLocation.head.id) ? { targetKind: "commit" as const, targetCommitId: state.currentLocation.head.id, x: nodeById.get(state.currentLocation.head.id)!.x, y: 30, targetY: nodeById.get(state.currentLocation.head.id)!.y - 8 } : undefined;
     const refRight = Math.max(0, ...localBranches.map((branch) => branch.bounds.left + branch.bounds.width));
-    return { kind: "graph", nodes, edges, omissions, localBranches, remoteTrackingRefs, head, predictionCommits: [], width: Math.max(PADDING_X * 2 + (maxRank + 1) * X_STEP + 56, refRight + PADDING_X), height: PADDING_Y * 2 + maxLane * Y_STEP + 104 };
+    const refBottom = Math.max(0, ...localBranches.map((branch) => branch.bounds.top + branch.bounds.height));
+    return { kind: "graph", nodes, edges, omissions, localBranches, remoteTrackingRefs, head, predictionCommits: [], width: Math.max(PADDING_X * 2 + (maxRank + 1) * X_STEP + 56, refRight + PADDING_X), height: Math.max(PADDING_Y * 2 + maxLane * Y_STEP + 104, refBottom + PADDING_Y) };
   } catch {
     return unavailable();
   }
@@ -145,52 +146,47 @@ function compactGraphSubject(subject: string): string {
 }
 
 function placeLocalBranches(state: RepositoryState, nodeById: ReadonlyMap<string, CommitGraphNode>, currentId: string | undefined): readonly GraphRef[] {
-  const candidates = state.localBranches
-    .filter((branch) => nodeById.has(branch.tipCommitId))
-    .map((branch) => {
-      const target = nodeById.get(branch.tipCommitId)!;
-      const current = state.currentLocation.kind === "branch" && branch.name === state.currentLocation.branchName;
-      return { branch, target, current, width: localRefWidth(branch.name) };
-    })
-    .sort((left, right) => Number(right.current) - Number(left.current) || left.target.y - right.target.y || left.target.x - right.target.x || left.branch.name.localeCompare(right.branch.name));
+  const grouped = new Map<string, typeof state.localBranches>();
+  for (const branch of state.localBranches.filter((branch) => nodeById.has(branch.tipCommitId))) {
+    grouped.set(branch.tipCommitId, [...(grouped.get(branch.tipCommitId) ?? []), branch]);
+  }
 
+  const groups = [...grouped.entries()].sort(([leftId], [rightId]) => {
+    const left = nodeById.get(leftId)!;
+    const right = nodeById.get(rightId)!;
+    return left.y - right.y || left.x - right.x || leftId.localeCompare(rightId);
+  });
   const placed: GraphRef[] = [];
   const currentNode = currentId ? nodeById.get(currentId) : undefined;
   const reserved = currentNode ? [{ left: currentNode.x + CURRENT_CONTEXT_LEFT_OFFSET, top: currentNode.y + CURRENT_CONTEXT_TOP_OFFSET, width: CURRENT_CONTEXT_WIDTH, height: CURRENT_CONTEXT_HEIGHT }] : [];
 
-  for (const candidate of candidates) {
-    if (candidate.current) {
-      placed.push(localRef(candidate.branch.name, candidate.branch.tipCommitId, candidate.target.x, REF_Y, candidate.target.x, candidate.target.y, true, candidate.width));
-      continue;
-    }
+  for (const [targetCommitId, branches] of groups) {
+    const target = nodeById.get(targetCommitId)!;
+    const isCurrent = (branch: typeof branches[number]) => state.currentLocation.kind === "branch" && branch.name === state.currentLocation.branchName;
+    const orderedBranches = [...branches].sort((left, right) => Number(isCurrent(right)) - Number(isCurrent(left)) || left.name.localeCompare(right.name));
+    let previousRight = Number.NEGATIVE_INFINITY;
 
-    const preferredYs = [candidate.target.y + 38, candidate.target.y - REF_ABOVE_OFFSET];
-    let ref = preferredYs
-      .map((y) => localRef(candidate.branch.name, candidate.branch.tipCommitId, candidate.target.x, y, candidate.target.x, candidate.target.y, false, candidate.width))
-      .find((item) => localRefIsSafe(item, placed, reserved));
-
-    if (!ref) {
-      for (const y of preferredYs) {
-        let x = candidate.target.x;
-        for (let attempt = 0; attempt < 64; attempt += 1) {
-          const candidateRef = localRef(candidate.branch.name, candidate.branch.tipCommitId, x, y, candidate.target.x, candidate.target.y, false, candidate.width);
-          if (localRefIsSafe(candidateRef, placed, reserved)) {
-            ref = candidateRef;
-            break;
-          }
-          const collidingBounds = [...placed.map((item) => item.bounds), ...reserved].filter((bounds) => boundsOverlap(candidateRef.bounds, bounds));
-          const connectorCollision = placed.find((item) => connectorIntersectsBounds(candidateRef.connector, item.bounds) || connectorIntersectsBounds(item.connector, candidateRef.bounds));
-          const blockerRight = Math.max(
-            ...collidingBounds.map((bounds) => bounds.left + bounds.width),
-            connectorCollision ? connectorCollision.bounds.left + connectorCollision.bounds.width : Number.NEGATIVE_INFINITY,
-          );
-          x = Math.max(x + REF_FAN_STEP, blockerRight + REF_GAP + candidate.width / 2);
-        }
-        if (ref) break;
+    for (const [index, branch] of orderedBranches.entries()) {
+      const current = isCurrent(branch);
+      const width = localRefWidth(branch.name);
+      if (current) {
+        const ref = localRef(branch.name, targetCommitId, target.x, REF_Y, target.x, target.y, true, width);
+        placed.push(ref);
+        previousRight = ref.bounds.left + ref.bounds.width;
+        continue;
       }
-    }
 
-    placed.push(ref ?? localRef(candidate.branch.name, candidate.branch.tipCommitId, candidate.target.x, candidate.target.y + 38, candidate.target.x, candidate.target.y, false, candidate.width));
+      const sameTargetFanOut = orderedBranches.length > 1;
+      const preferredX = sameTargetFanOut
+        ? (index === 0 ? target.x : Math.max(target.x + index * REF_FAN_STEP, previousRight + REF_GAP + width / 2))
+        : target.x;
+      const ref = REF_VERTICAL_OFFSETS
+        .map((offset) => localRef(branch.name, targetCommitId, preferredX, target.y + offset, target.x, target.y, false, width))
+        .find((item) => localRefIsSafe(item, placed, reserved))
+        ?? localRef(branch.name, targetCommitId, preferredX, target.y + REF_VERTICAL_OFFSETS[0], target.x, target.y, false, width);
+      placed.push(ref);
+      previousRight = ref.bounds.left + ref.bounds.width;
+    }
   }
 
   return placed;
