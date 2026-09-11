@@ -3,6 +3,7 @@ import test from "node:test";
 import type { CommitRef, RepositoryState } from "../domain/repositoryState";
 import { analyzeCommand, createCommandPreviewPresentation } from "./commandPreview";
 import { createCommitGraphPresentation } from "./commitGraphPresentation";
+import { renderGitMapHtml } from "./gitMapHtmlRenderer";
 import { createGitMapPresentation } from "./gitMapPresentation";
 
 const ids = {
@@ -90,4 +91,9 @@ test("rebase Preview keeps originals and draws regenerated commits from the base
   assert.equal(map.graph.localBranches.find((branch) => branch.label === "main")?.targetCommitId, ids.c);
   assert.equal(map.graph.localBranches.find((branch) => branch.label === "feature")?.targetCommitId, ids.e);
   assert.ok(map.graph.predictionPointers?.some((pointer) => pointer.kind === "branch" && pointer.label === "feature" && pointer.toX === predictions[1].x));
+
+  const html = renderGitMapHtml(map, "nonce");
+  assert.ok(html.includes("rewrite-edge"));
+  assert.ok(html.includes("fact-commit-rewritten-original"));
+  assert.ok(html.includes("再生成"));
 });
