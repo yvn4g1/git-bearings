@@ -64,6 +64,7 @@ const LOCAL_REF_CHAR_WIDTH = 7;
 const LOCAL_REF_PADDING = 20;
 const REF_HEIGHT = 20;
 const CURRENT_REF_OFFSET = -34;
+const CURRENT_REF_X_OFFSET = 64;
 const HEAD_REF_OFFSET = 30;
 const REF_FAN_STEP = 112;
 const REF_GAP = 12;
@@ -187,7 +188,7 @@ function placeLocalBranches(state: RepositoryState, nodeById: ReadonlyMap<string
       const current = isCurrent(branch);
       const width = localRefWidth(branch.name);
       if (current) {
-        const ref = localRef(branch.name, targetCommitId, target.x, target.y + CURRENT_REF_OFFSET, target.x, target.y, true, width);
+        const ref = localRef(branch.name, targetCommitId, target.x + CURRENT_REF_X_OFFSET, target.y + CURRENT_REF_OFFSET, target.x, target.y, true, width);
         placed.push(ref);
         previousRight = ref.bounds.left + ref.bounds.width;
         continue;
