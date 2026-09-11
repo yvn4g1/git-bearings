@@ -143,11 +143,12 @@ test("current branch and HEAD use a short horizontal offset so stacked lanes do 
   assert.ok(currentNode && upperNode && currentBranch && result.head);
   assert.equal(currentNode.x, upperNode.x, "fixture should place both rank-1 commits on different lanes at the same x");
   assert.equal(currentBranch.x, currentNode.x + 64);
-  assert.equal(currentBranch.y, currentNode.y - 34);
+  assert.equal(currentBranch.y, currentNode.y - 30);
   assert.equal(result.head.x, currentBranch.x);
-  assert.equal(result.head.y, currentBranch.y - 30);
+  assert.equal(result.head.y, currentBranch.bounds.top - 10);
   assert.equal(result.head.targetY, currentBranch.bounds.top - 2);
-  assert.notEqual(result.head.x, upperNode.x, "HEAD pointer should not share the other lane's commit x coordinate");
+  assert.equal(result.head.y + 8, result.head.targetY, "HEAD connector should collapse to zero length instead of forming a misleading vertical line");
+  assert.notEqual(result.head.x, upperNode.x, "HEAD label should not share the other lane's commit x coordinate");
   assert.notEqual(currentBranch.connector.fromX, upperNode.x, "current branch connector should visibly separate from the other lane's ref line");
   assert.equal(currentBranch.connector.toX, currentNode.x);
 });
