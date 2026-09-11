@@ -114,7 +114,7 @@ function selectionIdentity(selection: SelectionState): string {
 
 function stashPresentation(state: RepositoryState): StashPresentation {
   if (state.stash.kind === "unavailable") return { kind: "unavailable", reason: state.stash.reason };
-  return state.stash.value.length ? { kind: "shelf", count: state.value.length } : { kind: "none" };
+  return state.stash.value.length ? { kind: "shelf", count: state.stash.value.length } : { kind: "none" };
 }
 
 function remoteFacts(state: RepositoryState, selection: SelectionState): Pick<GitMapPresentation, "remotes" | "remoteMessage" | "remoteUnavailableReason" | "upstream" | "upstreamUnavailableReason" | "upstreamSelection"> {
