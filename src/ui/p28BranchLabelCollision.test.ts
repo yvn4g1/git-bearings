@@ -9,7 +9,7 @@ const historyCommit = (value: string, parent?: string): HistoryCommit => ({
   parentIds: parent ? [id(parent)] : [],
 });
 
-test("branch labels use vertical slots near their own commits instead of stretching the graph sideways", () => {
+test("branch labels stay near their own commits instead of stretching the graph sideways", () => {
   const history = [
     historyCommit("a"),
     historyCommit("b", "a"),
@@ -45,7 +45,8 @@ test("branch labels use vertical slots near their own commits instead of stretch
   for (const branch of result.localBranches) {
     const target = result.nodes.find((node) => node.commitId === branch.targetCommitId);
     assert.ok(target);
-    assert.equal(branch.x, target.x, `${branch.label} moved sideways away from its tip commit`);
+    if (branch.current) assert.equal(branch.x, target.x + 64, "current branch should use a short offset so its ref line cannot look like another lane");
+    else assert.equal(branch.x, target.x, `${branch.label} moved sideways away from its tip commit`);
   }
 
   for (const [index, branch] of result.localBranches.entries()) {
@@ -106,11 +107,12 @@ test("crowded branch labels avoid commit hash and subject text without moving un
   for (const branch of result.localBranches) {
     const target = result.nodes.find((node) => node.commitId === branch.targetCommitId);
     assert.ok(target);
-    assert.equal(branch.x, target.x, `${branch.label} moved sideways away from its tip commit`);
+    if (branch.current) assert.equal(branch.x, target.x + 64);
+    else assert.equal(branch.x, target.x, `${branch.label} moved sideways away from its tip commit`);
   }
 });
 
-test("current branch and HEAD stay next to the current tip instead of piercing another lane", () => {
+test("current branch and HEAD use a short horizontal offset so stacked lanes do not look like one vertical ref line", () => {
   const root = historyCommit("a");
   const upper = historyCommit("b", "a");
   const currentEntry = historyCommit("c", "a");
@@ -140,13 +142,14 @@ test("current branch and HEAD stay next to the current tip instead of piercing a
   const currentBranch = result.localBranches.find((branch) => branch.current);
   assert.ok(currentNode && upperNode && currentBranch && result.head);
   assert.equal(currentNode.x, upperNode.x, "fixture should place both rank-1 commits on different lanes at the same x");
-  assert.equal(currentBranch.x, currentNode.x);
+  assert.equal(currentBranch.x, currentNode.x + 64);
   assert.equal(currentBranch.y, currentNode.y - 34);
   assert.equal(result.head.x, currentBranch.x);
   assert.equal(result.head.y, currentBranch.y - 30);
   assert.equal(result.head.targetY, currentBranch.bounds.top - 2);
-  assert.ok(result.head.y + 8 > upperNode.y + 8, "HEAD pointer should start below the upper-lane commit");
-  assert.ok(Math.min(currentBranch.connector.fromY, currentBranch.connector.toY) > upperNode.y + 8, "current branch connector should stay below the upper-lane commit");
+  assert.notEqual(result.head.x, upperNode.x, "HEAD pointer should not share the other lane's commit x coordinate");
+  assert.notEqual(currentBranch.connector.fromX, upperNode.x, "current branch connector should visibly separate from the other lane's ref line");
+  assert.equal(currentBranch.connector.toX, currentNode.x);
 });
 
 function assertNoBranchLabelOverlapsCommitText(
