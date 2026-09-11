@@ -9,7 +9,7 @@ const historyCommit = (value: string, parent?: string): HistoryCommit => ({
   parentIds: parent ? [id(parent)] : [],
 });
 
-test("branch labels on different commits avoid each other and the current-location annotation", () => {
+test("branch labels use vertical slots near their own commits instead of stretching the graph sideways", () => {
   const history = [
     historyCommit("a"),
     historyCommit("b", "a"),
@@ -42,6 +42,12 @@ test("branch labels on different commits avoid each other and the current-locati
   assert.equal(result.kind, "graph");
   assert.equal(result.localBranches.length, 4);
 
+  for (const branch of result.localBranches) {
+    const target = result.nodes.find((node) => node.commitId === branch.targetCommitId);
+    assert.ok(target);
+    assert.equal(branch.x, target.x, `${branch.label} moved sideways away from its tip commit`);
+  }
+
   for (const [index, branch] of result.localBranches.entries()) {
     for (const other of result.localBranches.slice(index + 1)) {
       assert.equal(boundsOverlap(branch.bounds, other.bounds), false, `${branch.label} overlaps ${other.label}`);
@@ -55,8 +61,6 @@ test("branch labels on different commits avoid each other and the current-locati
     assert.equal(boundsOverlap(branch.bounds, currentContext), false, `${branch.label} overlaps current-location context`);
   }
 
-  const maxBranchRight = Math.max(...result.localBranches.map((branch) => branch.bounds.left + branch.bounds.width));
-  assert.ok(result.width >= maxBranchRight + 28);
   assert.equal(result.localBranches.find((branch) => branch.current)?.label, "main");
 });
 
