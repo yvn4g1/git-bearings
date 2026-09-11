@@ -23,16 +23,17 @@ test("Goal recommendation jump opens its Goal and category before scrolling to t
 test("Goal catalog keeps individual Goal details collapsed and visually subordinate to their category", () => {
   const html = renderGitMapHtml(availableGoalPresentation(), "nonce");
 
-  const category = '<details class="goal-category"><summary class="goal-category-summary">変更を残したい</summary>';
-  const goal = '<details id="goal-pushCommits" class="overview-section goal-item"><summary class="goal-item-summary">local commitをRemoteへ送りたい</summary>';
-  assert.ok(html.includes(category));
-  assert.ok(html.includes(goal));
-  assert.ok(html.indexOf(category) < html.indexOf(goal));
+  assert.ok(html.includes('<details class="goal-category goal-category-has-candidates">'));
+  assert.ok(html.includes('<summary class="goal-category-summary">変更を残したい <span class="goal-category-count">候補 3件</span></summary>'));
+  assert.ok(html.includes('<details id="goal-stageChanges" class="overview-section goal-item goal-item-recommended">'));
+  assert.ok(html.includes('<span class="goal-status goal-status-recommended">★ 今おすすめ</span>'));
+  assert.ok(html.includes('<span class="goal-status goal-status-actionable">使えそう</span>'));
+  assert.ok(html.includes('<span class="goal-status goal-status-input">入力が必要</span>'));
+  assert.ok(html.includes('<summary class="goal-item-summary">local commitをRemoteへ送りたい</summary>'));
   assert.ok(!html.includes('<section id="goal-pushCommits"'));
-  assert.ok(!goal.includes(" open"));
-  assert.ok(html.includes(".goal-category > .goal-category-summary"));
   assert.ok(html.includes(".goal-category > .goal-item"));
-  assert.ok(html.includes(".goal-item > .goal-item-summary"));
+  assert.ok(html.includes(".goal-item-recommended"));
+  assert.ok(html.includes(".goal-status"));
 });
 
 test("Working Tree to Staging guidance has its own wrapping row instead of a narrow separator column", () => {
@@ -46,14 +47,41 @@ test("Working Tree to Staging guidance has its own wrapping row instead of a nar
   assert.ok(html.includes("@media (max-width:520px) { .map-context { grid-template-columns:minmax(0,1fr); }"));
 });
 
+test("Graph polish truncates only the visible long branch label and strengthens ordinary edges", () => {
+  const base = availableGoalPresentation();
+  assert.equal(base.graph.kind, "graph");
+  const longBranch = "experiment/very-long-branch-name-for-layout";
+  const branch = base.graph.localBranches[0];
+  assert.ok(branch);
+  const html = renderGitMapHtml({
+    ...base,
+    graph: {
+      ...base.graph,
+      localBranches: [{ ...branch, label: longBranch, bounds: { ...branch.bounds, width: 220, left: branch.x - 110 } }],
+    },
+  }, "nonce");
+
+  assert.ok(html.includes("experiment/very-long-branch…"));
+  assert.ok(html.includes(`<title>${longBranch}</title>`));
+  assert.ok(html.includes(`&quot;branchName&quot;:&quot;${longBranch}&quot;`));
+  assert.ok(html.includes(".graph-edge { fill:none; stroke:var(--vscode-descriptionForeground); stroke-width:1.75; opacity:.78; }"));
+});
+
 function availableGoalPresentation(): GitMapPresentation {
   const commit = { id: "a".repeat(40), shortId: "aaaaaaa", subject: "test" };
+  const featureCommit = { id: "b".repeat(40), shortId: "bbbbbbb", subject: "feature" };
   const state: RepositoryState = {
     repository: { rootPath: "/repo" },
     currentLocation: { kind: "branch", branchName: "main", head: commit, detached: false },
-    localBranches: [{ name: "main", tipCommitId: commit.id }],
-    workingTree: { staged: [], unstaged: [], untracked: [], conflicts: [] },
-    history: [{ commit, parentIds: [] }],
+    localBranches: [
+      { name: "main", tipCommitId: commit.id },
+      { name: "feature/test", tipCommitId: featureCommit.id },
+    ],
+    workingTree: { staged: [], unstaged: [], untracked: ["memo.txt"], conflicts: [] },
+    history: [
+      { commit, parentIds: [] },
+      { commit: featureCommit, parentIds: [commit.id] },
+    ],
     operation: { kind: "normal" },
     remotes: { kind: "notConfigured" },
     upstream: { kind: "notConfigured" },
