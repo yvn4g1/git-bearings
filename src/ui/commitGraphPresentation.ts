@@ -46,6 +46,8 @@ export interface CommitGraphPresentation {
   readonly head?: GraphHead;
   readonly predictionCommits?: readonly PredictionCommit[];
   readonly predictionEdges?: readonly PredictionEdge[];
+  readonly rewriteEdges?: readonly PredictionEdge[];
+  readonly rewrittenOriginalCommitIds?: readonly string[];
   readonly predictionPointers?: readonly PredictionPointer[];
 }
 export interface GraphRefBounds { readonly left: number; readonly top: number; readonly width: number; readonly height: number; }
