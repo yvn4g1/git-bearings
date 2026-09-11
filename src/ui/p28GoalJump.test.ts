@@ -67,6 +67,15 @@ test("Graph polish truncates only the visible long branch label and strengthens 
   assert.ok(html.includes(".graph-edge { fill:none; stroke:var(--vscode-descriptionForeground); stroke-width:1.75; opacity:.78; }"));
 });
 
+test("Analyze saves the current command draft before rerendering the Preview", () => {
+  const html = renderGitMapHtml(availableGoalPresentation(), "nonce");
+  const submit = "document.addEventListener('submit',e=>";
+  const saveAndAnalyze = "const i=f.querySelector('[data-command-input]');save();v.postMessage({type:'analyze',input:i?.value||''})";
+  assert.ok(html.includes(submit));
+  assert.ok(html.includes(saveAndAnalyze));
+  assert.ok(html.indexOf(submit) < html.indexOf(saveAndAnalyze));
+});
+
 function availableGoalPresentation(): GitMapPresentation {
   const commit = { id: "a".repeat(40), shortId: "aaaaaaa", subject: "test" };
   const featureCommit = { id: "b".repeat(40), shortId: "bbbbbbb", subject: "feature" };
