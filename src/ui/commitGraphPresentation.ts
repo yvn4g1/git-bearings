@@ -66,11 +66,15 @@ const REF_HEIGHT = 20;
 const REF_Y = 48;
 const REF_FAN_STEP = 112;
 const REF_GAP = 12;
-const REF_VERTICAL_OFFSETS = [38, -34, 62, -58] as const;
+const REF_VERTICAL_OFFSETS = [38, -34, 62, -58, 86, -82, 110, -106] as const;
 const CURRENT_CONTEXT_LEFT_OFFSET = 9;
 const CURRENT_CONTEXT_TOP_OFFSET = 18;
 const CURRENT_CONTEXT_WIDTH = 230;
 const CURRENT_CONTEXT_HEIGHT = 40;
+const NODE_TEXT_LEFT_OFFSET = 9;
+const NODE_TEXT_TOP_OFFSET = -18;
+const NODE_TEXT_WIDTH = 118;
+const NODE_TEXT_HEIGHT = 38;
 
 export function createCommitGraphPresentation(state: RepositoryState): CommitGraphPresentation {
   if (state.history.length === 0) {
@@ -158,7 +162,17 @@ function placeLocalBranches(state: RepositoryState, nodeById: ReadonlyMap<string
   });
   const placed: GraphRef[] = [];
   const currentNode = currentId ? nodeById.get(currentId) : undefined;
-  const reserved = currentNode ? [{ left: currentNode.x + CURRENT_CONTEXT_LEFT_OFFSET, top: currentNode.y + CURRENT_CONTEXT_TOP_OFFSET, width: CURRENT_CONTEXT_WIDTH, height: CURRENT_CONTEXT_HEIGHT }] : [];
+  const reserved: GraphRefBounds[] = [
+    ...[...nodeById.values()].map((node) => ({
+      left: node.x + NODE_TEXT_LEFT_OFFSET,
+      top: node.y + NODE_TEXT_TOP_OFFSET,
+      width: NODE_TEXT_WIDTH,
+      height: NODE_TEXT_HEIGHT,
+    })),
+    ...(currentNode ? [{ left: currentNode.x + CURRENT_CONTEXT_LEFT_OFFSET, top: currentNode.y + CURRENT_CONTEXT_TOP_OFFSET, width: CURRENT_CONTEXT_WIDTH, height: CURRENT_CONTEXT_HEIGHT }] : []),
+  ];
+  const overflowBaseY = Math.max(...[...nodeById.values()].map((node) => node.y)) + 48;
+  let overflowCount = 0;
 
   for (const [targetCommitId, branches] of groups) {
     const target = nodeById.get(targetCommitId)!;
@@ -180,10 +194,18 @@ function placeLocalBranches(state: RepositoryState, nodeById: ReadonlyMap<string
       const preferredX = sameTargetFanOut
         ? (index === 0 ? target.x : Math.max(target.x + index * REF_FAN_STEP, previousRight + REF_GAP + width / 2))
         : target.x;
-      const ref = REF_VERTICAL_OFFSETS
+      let ref = REF_VERTICAL_OFFSETS
         .map((offset) => localRef(branch.name, targetCommitId, preferredX, target.y + offset, target.x, target.y, false, width))
-        .find((item) => localRefIsSafe(item, placed, reserved))
-        ?? localRef(branch.name, targetCommitId, preferredX, target.y + REF_VERTICAL_OFFSETS[0], target.x, target.y, false, width);
+        .filter((item) => item.bounds.top >= 0)
+        .find((item) => localRefIsSafe(item, placed, reserved));
+
+      while (!ref) {
+        const overflowY = overflowBaseY + overflowCount * (REF_HEIGHT + 8);
+        overflowCount += 1;
+        const overflowRef = localRef(branch.name, targetCommitId, preferredX, overflowY, target.x, target.y, false, width);
+        if (localRefIsSafe(overflowRef, placed, reserved)) ref = overflowRef;
+      }
+
       placed.push(ref);
       previousRight = ref.bounds.left + ref.bounds.width;
     }
@@ -193,7 +215,9 @@ function placeLocalBranches(state: RepositoryState, nodeById: ReadonlyMap<string
 }
 
 function localRefIsSafe(ref: GraphRef, placed: readonly GraphRef[], reserved: readonly GraphRefBounds[]): boolean {
-  if ([...placed.map((item) => item.bounds), ...reserved].some((bounds) => boundsOverlap(ref.bounds, bounds))) return false;
+  const obstacles = [...placed.map((item) => item.bounds), ...reserved];
+  if (obstacles.some((bounds) => boundsOverlap(ref.bounds, bounds))) return false;
+  if (reserved.some((bounds) => connectorIntersectsBounds(ref.connector, bounds))) return false;
   return !placed.some((item) => connectorIntersectsBounds(ref.connector, item.bounds) || connectorIntersectsBounds(item.connector, ref.bounds));
 }
 
