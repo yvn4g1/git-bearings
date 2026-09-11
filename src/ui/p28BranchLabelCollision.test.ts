@@ -110,6 +110,45 @@ test("crowded branch labels avoid commit hash and subject text without moving un
   }
 });
 
+test("current branch and HEAD stay next to the current tip instead of piercing another lane", () => {
+  const root = historyCommit("a");
+  const upper = historyCommit("b", "a");
+  const currentEntry = historyCommit("c", "a");
+  const history = [root, upper, currentEntry];
+  const state: RepositoryState = {
+    repository: { rootPath: "/repo" },
+    currentLocation: { kind: "branch", branchName: "main", head: currentEntry.commit, detached: false },
+    localBranches: [
+      { name: "feature/simple", tipCommitId: upper.commit.id },
+      { name: "main", tipCommitId: currentEntry.commit.id },
+    ],
+    workingTree: { staged: [], unstaged: [], untracked: [], conflicts: [] },
+    history,
+    operation: { kind: "normal" },
+    remotes: { kind: "available", value: [] },
+    upstream: { kind: "notConfigured" },
+    stash: { kind: "available", value: [] },
+    comparison: { kind: "notConfigured" },
+    stateVersion: 1,
+    refreshedAt: new Date(0),
+  };
+
+  const result = createCommitGraphPresentation(state);
+  assert.equal(result.kind, "graph");
+  const currentNode = result.nodes.find((node) => node.commitId === currentEntry.commit.id);
+  const upperNode = result.nodes.find((node) => node.commitId === upper.commit.id);
+  const currentBranch = result.localBranches.find((branch) => branch.current);
+  assert.ok(currentNode && upperNode && currentBranch && result.head);
+  assert.equal(currentNode.x, upperNode.x, "fixture should place both rank-1 commits on different lanes at the same x");
+  assert.equal(currentBranch.x, currentNode.x);
+  assert.equal(currentBranch.y, currentNode.y - 34);
+  assert.equal(result.head.x, currentBranch.x);
+  assert.equal(result.head.y, currentBranch.y - 30);
+  assert.equal(result.head.targetY, currentBranch.bounds.top - 2);
+  assert.ok(result.head.y + 8 > upperNode.y + 8, "HEAD pointer should start below the upper-lane commit");
+  assert.ok(Math.min(currentBranch.connector.fromY, currentBranch.connector.toY) > upperNode.y + 8, "current branch connector should stay below the upper-lane commit");
+});
+
 function assertNoBranchLabelOverlapsCommitText(
   branches: readonly { readonly label: string; readonly bounds: GraphRefBounds }[],
   nodes: readonly { readonly shortId: string; readonly x: number; readonly y: number }[],
