@@ -66,6 +66,7 @@ const REF_HEIGHT = 20;
 const REF_Y = 48;
 const REF_FAN_STEP = 112;
 const REF_GAP = 12;
+const REF_ABOVE_OFFSET = 34;
 const CURRENT_CONTEXT_LEFT_OFFSET = 9;
 const CURRENT_CONTEXT_TOP_OFFSET = 18;
 const CURRENT_CONTEXT_WIDTH = 230;
@@ -163,24 +164,41 @@ function placeLocalBranches(state: RepositoryState, nodeById: ReadonlyMap<string
       continue;
     }
 
-    let x = candidate.target.x;
-    let ref = localRef(candidate.branch.name, candidate.branch.tipCommitId, x, candidate.target.y + 38, candidate.target.x, candidate.target.y, false, candidate.width);
-    for (let attempt = 0; attempt < 64; attempt += 1) {
-      const collidingBounds = [...placed.map((item) => item.bounds), ...reserved].filter((bounds) => boundsOverlap(ref.bounds, bounds));
-      const connectorCollision = placed.find((item) => connectorIntersectsBounds(ref.connector, item.bounds) || connectorIntersectsBounds(item.connector, ref.bounds));
-      if (collidingBounds.length === 0 && !connectorCollision) break;
+    const preferredYs = [candidate.target.y + 38, candidate.target.y - REF_ABOVE_OFFSET];
+    let ref = preferredYs
+      .map((y) => localRef(candidate.branch.name, candidate.branch.tipCommitId, candidate.target.x, y, candidate.target.x, candidate.target.y, false, candidate.width))
+      .find((item) => localRefIsSafe(item, placed, reserved));
 
-      const blockerRight = Math.max(
-        ...collidingBounds.map((bounds) => bounds.left + bounds.width),
-        connectorCollision ? connectorCollision.bounds.left + connectorCollision.bounds.width : Number.NEGATIVE_INFINITY,
-      );
-      x = Math.max(x + REF_FAN_STEP, blockerRight + REF_GAP + candidate.width / 2);
-      ref = localRef(candidate.branch.name, candidate.branch.tipCommitId, x, candidate.target.y + 38, candidate.target.x, candidate.target.y, false, candidate.width);
+    if (!ref) {
+      for (const y of preferredYs) {
+        let x = candidate.target.x;
+        for (let attempt = 0; attempt < 64; attempt += 1) {
+          const candidateRef = localRef(candidate.branch.name, candidate.branch.tipCommitId, x, y, candidate.target.x, candidate.target.y, false, candidate.width);
+          if (localRefIsSafe(candidateRef, placed, reserved)) {
+            ref = candidateRef;
+            break;
+          }
+          const collidingBounds = [...placed.map((item) => item.bounds), ...reserved].filter((bounds) => boundsOverlap(candidateRef.bounds, bounds));
+          const connectorCollision = placed.find((item) => connectorIntersectsBounds(candidateRef.connector, item.bounds) || connectorIntersectsBounds(item.connector, candidateRef.bounds));
+          const blockerRight = Math.max(
+            ...collidingBounds.map((bounds) => bounds.left + bounds.width),
+            connectorCollision ? connectorCollision.bounds.left + connectorCollision.bounds.width : Number.NEGATIVE_INFINITY,
+          );
+          x = Math.max(x + REF_FAN_STEP, blockerRight + REF_GAP + candidate.width / 2);
+        }
+        if (ref) break;
+      }
     }
-    placed.push(ref);
+
+    placed.push(ref ?? localRef(candidate.branch.name, candidate.branch.tipCommitId, candidate.target.x, candidate.target.y + 38, candidate.target.x, candidate.target.y, false, candidate.width));
   }
 
   return placed;
+}
+
+function localRefIsSafe(ref: GraphRef, placed: readonly GraphRef[], reserved: readonly GraphRefBounds[]): boolean {
+  if ([...placed.map((item) => item.bounds), ...reserved].some((bounds) => boundsOverlap(ref.bounds, bounds))) return false;
+  return !placed.some((item) => connectorIntersectsBounds(ref.connector, item.bounds) || connectorIntersectsBounds(item.connector, ref.bounds));
 }
 
 function localRef(label: string, targetCommitId: string, x: number, y: number, targetX: number, targetY: number, current: boolean, width: number): GraphRef {
