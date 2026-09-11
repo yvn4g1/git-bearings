@@ -89,11 +89,11 @@ export function createCommitGraphPresentation(state: RepositoryState): CommitGra
   }
 
   try {
+    const baseId = resolveBaseTip(state);
     const ranks = ranksFor(entries);
     const ordered = [...entries.keys()].sort((left, right) => compareEntries(entries, ranks, left, right));
-    const lanes = lanesFor(entries, ranks, ordered);
+    const lanes = lanesFor(entries, ranks, ordered, baseId);
     const currentId = state.currentLocation.kind === "unborn" ? undefined : state.currentLocation.head.id;
-    const baseId = resolveBaseTip(state);
     const mergeBaseId = state.comparison.kind === "available" ? state.comparison.value.mergeBase?.id : undefined;
     const nodes = ordered.map((commitId) => {
       const entry = entries.get(commitId)!;
@@ -274,9 +274,12 @@ function compareEntries(entries: ReadonlyMap<string, { readonly index: number }>
   return ranks.get(left)! - ranks.get(right)! || entries.get(left)!.index - entries.get(right)!.index || left.localeCompare(right);
 }
 
-function lanesFor(entries: ReadonlyMap<string, { readonly parentIds: readonly string[] }>, ranks: ReadonlyMap<string, number>, ordered: readonly string[]): ReadonlyMap<string, number> {
+function lanesFor(entries: ReadonlyMap<string, { readonly parentIds: readonly string[] }>, ranks: ReadonlyMap<string, number>, ordered: readonly string[], baseId: string | undefined): ReadonlyMap<string, number> {
   const lanes = new Map<string, number>();
+  const baseSpine = baseSpineFor(entries, baseId);
+  for (const id of baseSpine) lanes.set(id, 0);
   for (const id of ordered) {
+    if (baseSpine.has(id)) continue;
     const parentLanes = entries.get(id)!.parentIds.map((parentId) => lanes.get(parentId)).filter((lane): lane is number => lane !== undefined).sort((a, b) => a - b);
     const usedAtRank = new Set(ordered.filter((other) => ranks.get(other) === ranks.get(id) && lanes.has(other)).map((other) => lanes.get(other)!));
     let lane = parentLanes.find((candidate) => !usedAtRank.has(candidate)) ?? 0;
@@ -284,6 +287,17 @@ function lanesFor(entries: ReadonlyMap<string, { readonly parentIds: readonly st
     lanes.set(id, lane);
   }
   return lanes;
+}
+
+function baseSpineFor(entries: ReadonlyMap<string, { readonly parentIds: readonly string[] }>, baseId: string | undefined): ReadonlySet<string> {
+  const spine = new Set<string>();
+  let current = baseId && entries.has(baseId) ? baseId : undefined;
+  while (current && !spine.has(current)) {
+    spine.add(current);
+    const firstParent = entries.get(current)!.parentIds[0];
+    current = firstParent && entries.has(firstParent) ? firstParent : undefined;
+  }
+  return spine;
 }
 
 function resolveBaseTip(state: RepositoryState): string | undefined {
