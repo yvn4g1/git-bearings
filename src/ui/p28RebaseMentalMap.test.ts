@@ -16,11 +16,11 @@ const ids = {
 const ref = (id: string, subject: string): CommitRef => ({ id, shortId: id.slice(0, 7), subject });
 
 function rebaseState(): RepositoryState {
-  const a = ref(ids.a, "A");
-  const b = ref(ids.b, "B");
-  const c = ref(ids.c, "C main");
-  const d = ref(ids.d, "D feature");
-  const e = ref(ids.e, "E feature");
+  const a = ref(ids.a, "ユーザー一覧画面を追加");
+  const b = ref(ids.b, "一覧画面の初期表示を追加");
+  const c = ref(ids.c, "一覧取得エラーを表示");
+  const d = ref(ids.d, "部署フィルタを追加");
+  const e = ref(ids.e, "フィルタ条件をURLに保持");
   return {
     repository: { rootPath: "/repo" },
     currentLocation: { kind: "branch", branchName: "feature", head: e, detached: false },
@@ -65,7 +65,7 @@ test("configured base branch stays on the straight spine while feature branches 
   assert.equal(graph.localBranches.find((branch) => branch.label === "main")?.targetCommitId, ids.c);
 });
 
-test("rebase Preview keeps originals and draws regenerated commits from the base spine", () => {
+test("rebase Preview keeps originals and draws readable regenerated commits from the base spine", () => {
   const state = rebaseState();
   const analysis = analyzeCommand(state, "git rebase main");
   const preview = createCommandPreviewPresentation({ active: analysis, history: [analysis] }, state);
@@ -83,6 +83,9 @@ test("rebase Preview keeps originals and draws regenerated commits from the base
   assert.equal(predictions[1].y, base.y);
   assert.equal(predictions[0].x, base.x + 130);
   assert.equal(predictions[1].x, predictions[0].x + 130);
+  assert.deepEqual(predictions.map((item) => item.description), ["部署フィルタを追加", "フィルタ条件をURLに保持"]);
+  assert.ok(predictions.every((item) => item.visualState === undefined));
+  assert.ok(map.graph.width >= predictions[1].x + 148);
 
   assert.deepEqual(map.graph.rewrittenOriginalCommitIds, [ids.d, ids.e]);
   assert.equal(map.graph.rewriteEdges?.length, 2);
@@ -95,5 +98,9 @@ test("rebase Preview keeps originals and draws regenerated commits from the base
   const html = renderGitMapHtml(map, "nonce");
   assert.ok(html.includes("rewrite-edge"));
   assert.ok(html.includes("fact-commit-rewritten-original"));
+  assert.ok(html.includes("prediction-description"));
+  assert.ok(html.includes("部署フィルタを追加"));
+  assert.ok(html.includes("フィルタ条件をURLに保持"));
+  assert.ok(html.includes(".prediction-label { fill:var(--vscode-foreground)"));
   assert.ok(html.includes("再生成"));
 });
