@@ -57,18 +57,20 @@ function previewGraph(graph: CommitGraphPresentation, preview: CommandPreviewPre
   const predictions = new Map<string, { readonly x: number; readonly y: number }>();
   const factRight = Math.max(0, ...graph.nodes.map((node) => node.x));
   const predictionStep = 130;
+  const predictionTextRightPadding = 148;
   let nextX = factRight + 118;
   const predictionCommits = preview.map.predictions.map((item, index) => {
     const parents = item.parentCommitIds.map((id) => facts.get(id)).filter((item): item is NonNullable<typeof item> => item !== undefined);
     const basedOn = item.basedOn ? (item.basedOn.kind === "existing" ? facts.get(item.basedOn.id) : predictions.get(item.basedOn.id)) : undefined;
     const anchor = parents[0] ?? basedOn;
-    const rewritten = item.rewrittenFromCommitId !== undefined && basedOn !== undefined;
+    const rewrittenOriginal = item.rewrittenFromCommitId ? facts.get(item.rewrittenFromCommitId) : undefined;
+    const rewritten = rewrittenOriginal !== undefined && basedOn !== undefined;
     const point = rewritten
       ? { x: basedOn.x + predictionStep, y: basedOn.y }
       : { x: Math.max(anchor ? anchor.x + predictionStep : nextX, nextX), y: anchor ? anchor.y + (item.basedOn ? 34 : 0) : 48 + index * 34 };
     nextX = Math.max(nextX, point.x + predictionStep);
     predictions.set(item.id, point);
-    return { id: item.id, label: "Prediction" as const, description: item.description, ...point, visualState: "related" as const };
+    return { id: item.id, label: "Prediction" as const, description: rewrittenOriginal?.subject ?? item.description, ...point };
   });
   const predictionEdges = preview.map.predictions.flatMap((item) => {
     const target = predictions.get(item.id)!;
@@ -84,7 +86,8 @@ function previewGraph(graph: CommitGraphPresentation, preview: CommandPreviewPre
   });
   const rewrittenOriginalCommitIds = preview.map.predictions.flatMap((item) => item.rewrittenFromCommitId ? [item.rewrittenFromCommitId] : []);
   const predictionPointers = preview.map.pointers.flatMap((pointer, index) => { const target = pointer.target.kind === "existing" ? facts.get(pointer.target.id) : predictions.get(pointer.target.id); if (!target) return []; const factualRefRight = pointer.kind === "branch" && pointer.target.kind === "existing" ? Math.max(target.x, ...graph.localBranches.filter((ref) => ref.targetCommitId === pointer.target.id).map((ref) => ref.bounds.left + ref.bounds.width + 52)) : target.x; return [{ label: pointer.label, x: factualRefRight, y: target.y - (pointer.kind === "branch" ? 48 : 78) - index * 18, toX: target.x, toY: target.y - 9, kind: pointer.kind }]; });
-  return { ...graph, predictionCommits, predictionEdges, rewriteEdges, rewrittenOriginalCommitIds, predictionPointers, width: Math.max(graph.width, nextX + 28, ...predictionPointers.map((pointer) => pointer.x + 52)) };
+  const predictionTextRight = Math.max(0, ...predictionCommits.map((node) => node.x + predictionTextRightPadding));
+  return { ...graph, predictionCommits, predictionEdges, rewriteEdges, rewrittenOriginalCommitIds, predictionPointers, width: Math.max(graph.width, nextX + 28, predictionTextRight, ...predictionPointers.map((pointer) => pointer.x + 52)) };
 }
 
 function unavailable(snapshot: Exclude<RepositoryStateSnapshot, { kind: "available" }>, message: string, reason?: string): GitMapPresentation {
