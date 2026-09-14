@@ -38,6 +38,8 @@ export interface GitMapPresentation {
   readonly detailMode?: DetailMode;
 }
 
+type PreviewBounds = { readonly left: number; readonly top: number; readonly width: number; readonly height: number };
+
 export function createGitMapPresentation(snapshot: RepositoryStateSnapshot, selection: SelectionState = { kind: "overview" }, commitDetail: CommitDetailState = { kind: "idle" }, commandPreview?: CommandPreviewPresentation, detailMode: DetailMode = "inspect"): GitMapPresentation {
   if (snapshot.kind === "empty") return unavailable(snapshot, snapshot.reason === "noRepository" ? "このworkspaceではGit Repositoryが見つかっていません。Git Bearingsは既存Repositoryの状態を読み取るツールです。" : "Git状態をまだ読み取っていません");
   if (snapshot.kind === "loading") return unavailable(snapshot, "Git状態を読み取り中…");
@@ -87,9 +89,45 @@ function previewGraph(graph: CommitGraphPresentation, preview: CommandPreviewPre
     return from && target ? [{ fromX: from.x, fromY: from.y, toX: target.x, toY: target.y }] : [];
   });
   const rewrittenOriginalCommitIds = preview.map.predictions.flatMap((item) => item.rewrittenFromCommitId ? [item.rewrittenFromCommitId] : []);
-  const predictionPointers = preview.map.pointers.flatMap((pointer, index) => { const target = pointer.target.kind === "existing" ? facts.get(pointer.target.id) : predictions.get(pointer.target.id); if (!target) return []; const factualRefRight = pointer.kind === "branch" && pointer.target.kind === "existing" ? Math.max(target.x, ...graph.localBranches.filter((ref) => ref.targetCommitId === pointer.target.id).map((ref) => ref.bounds.left + ref.bounds.width + 52)) : target.x; return [{ label: pointer.label, x: factualRefRight, y: target.y - (pointer.kind === "branch" ? 48 : 78) - index * 18, toX: target.x, toY: target.y - 9, kind: pointer.kind }]; });
+  const reservedPointerBounds: PreviewBounds[] = [
+    ...graph.localBranches.map((ref) => ref.bounds),
+    ...graph.nodes.map((node) => ({ left: node.x + 9, top: node.y - 18, width: 118, height: 38 })),
+    ...graph.nodes.filter((node) => node.roles.includes("current")).map((node) => ({ left: node.x + 9, top: node.y + 18, width: 230, height: 40 })),
+    ...(graph.head ? [{ left: graph.head.x - 38, top: graph.head.y - 15, width: 76, height: 24 }] : []),
+  ];
+  const placedPointerBounds: PreviewBounds[] = [];
+  const predictionPointers = preview.map.pointers.flatMap((pointer, index) => {
+    const target = pointer.target.kind === "existing" ? facts.get(pointer.target.id) : predictions.get(pointer.target.id);
+    if (!target) return [];
+    const x = pointer.kind === "branch" && pointer.target.kind === "existing"
+      ? Math.max(target.x, ...graph.localBranches.filter((ref) => ref.targetCommitId === pointer.target.id).map((ref) => ref.bounds.left + ref.bounds.width + 52))
+      : target.x;
+    const displayLabel = pointer.kind === "head" ? "HEAD → predicted branch" : `${pointer.label} (predicted)`;
+    const labelWidth = predictionPointerWidth(displayLabel);
+    const preferredY = target.y - (pointer.kind === "branch" ? 48 : 78) - index * 18;
+    const candidates = [0, 24, 48, 72, 96, 120]
+      .map((offset) => preferredY - offset)
+      .filter((y) => y >= 18);
+    const y = candidates.find((candidateY) => previewBoundsAreSafe(predictionPointerBounds(x, candidateY, labelWidth), [...reservedPointerBounds, ...placedPointerBounds]))
+      ?? Math.max(18, candidates[candidates.length - 1] ?? preferredY);
+    placedPointerBounds.push(predictionPointerBounds(x, y, labelWidth));
+    return [{ label: pointer.label, x, y, toX: target.x, toY: target.y - 9, kind: pointer.kind }];
+  });
   const predictionTextRight = Math.max(0, ...predictionCommits.map((node) => node.x + predictionTextRightPadding));
-  return { ...graph, predictionCommits, predictionEdges, rewriteEdges, rewrittenOriginalCommitIds, predictionPointers, width: Math.max(graph.width, nextX + 28, predictionTextRight, ...predictionPointers.map((pointer) => pointer.x + 52)) };
+  const pointerTextRight = Math.max(0, ...predictionPointers.map((pointer) => pointer.x + predictionPointerWidth(pointer.kind === "head" ? "HEAD → predicted branch" : `${pointer.label} (predicted)`) / 2 + 28));
+  return { ...graph, predictionCommits, predictionEdges, rewriteEdges, rewrittenOriginalCommitIds, predictionPointers, width: Math.max(graph.width, nextX + 28, predictionTextRight, pointerTextRight) };
+}
+
+function predictionPointerWidth(label: string): number {
+  return Math.min(240, Math.max(96, Array.from(label).length * 7 + 20));
+}
+
+function predictionPointerBounds(x: number, y: number, width: number): PreviewBounds {
+  return { left: x - width / 2, top: y - 15, width, height: 24 };
+}
+
+function previewBoundsAreSafe(bounds: PreviewBounds, reserved: readonly PreviewBounds[]): boolean {
+  return !reserved.some((item) => bounds.left < item.left + item.width && bounds.left + bounds.width > item.left && bounds.top < item.top + item.height && bounds.top + bounds.height > item.top);
 }
 
 function unavailable(snapshot: Exclude<RepositoryStateSnapshot, { kind: "available" }>, message: string, reason?: string): GitMapPresentation {
