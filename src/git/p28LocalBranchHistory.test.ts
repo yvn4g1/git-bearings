@@ -70,9 +70,9 @@ test("Core reader and Commit Graph include an unmerged local branch without mixi
     assert.equal(mainRef.current, true);
     assert.ok(mainRef.y < mainNode.y);
     assert.equal(featureRef.current, false);
-    assert.ok(featureRef.y > featureNode.y);
-    assert.ok(featureRef.connector.fromY < featureRef.y);
-    assert.ok(featureRef.connector.toY > featureNode.y);
+    assert.equal(featureRef.x, featureNode.x);
+    assert.equal(featureRef.connector.toX, featureNode.x);
+    assert.notEqual(featureRef.connector.fromY, featureRef.connector.toY);
     assert.ok(featureRef.bounds.width > mainRef.bounds.width);
     assert.ok(featureRef.bounds.width >= 180);
     assert.ok(graph.width >= featureRef.bounds.left + featureRef.bounds.width + 28);

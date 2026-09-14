@@ -15,6 +15,18 @@ Git BearingsはGit 2.23以降を対象に、Repositoryの状態をread-onlyで�
 
 Git CLIの観測は厳格なcommand signature allowlistとshellなしのargv実行に限定しています。MVPで対応していないcommand、option、high-risk操作も実行しません。
 
+## Command Preview の対応範囲
+
+Previewは次の限定した構文だけを解析し、状態変化の予測を表示します。Git操作は実行しません。
+
+- `git add <path...>` / `git add .`、`git restore --staged <path...>`、`git reset HEAD <path...>`、`git commit` / `git commit -m <message>`
+- `git switch <branch>` / `git switch -c <branch>`
+- `git stash` / `push`（`-u`、`-m`のみ）、`list`、`apply` / `pop`（`stash@{n}`のみ）
+- `git fetch [remote]`、`git push` / `git push [-u] <remote> <branch>`、`git pull [--rebase] [<remote> <branch>]`
+- `git merge <branch>`、`git rebase <upstream>`
+
+これ以外のcommandやoptionは未対応です。shell演算子を含む入力は解析しません。`git reset --hard`、force push、`git clean --force`などのhigh-risk操作は安全のためPreview対象外です。
+
 ## Supported environment
 
 正式確認対象はWindows、macOS、Linux上のVS Code DesktopとWSLです。Remote SSHとDev ContainersはMVPの正式保証対象外です。
