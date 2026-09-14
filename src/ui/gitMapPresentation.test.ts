@@ -105,6 +105,50 @@ test("Prediction placement stays compact and is not pushed by long branch labels
   assert.ok(currentRef.bounds.left + currentRef.bounds.width > (map.graph.predictionCommits?.[0]?.x ?? Number.POSITIVE_INFINITY));
 });
 
+test("merge Prediction branch pointer avoids the factual HEAD and current branch label", () => {
+  const baseCommit = { id: "b".repeat(40), shortId: "bbbbbbb", subject: "一覧画面の初期表示を追加" };
+  const mainCommit = { id: "c".repeat(40), shortId: "ccccccc", subject: "一覧取得エラーを表示" };
+  const featureCommit = { id: "d".repeat(40), shortId: "ddddddd", subject: "フィルタ条件をURLに保持" };
+  const branchName = "feature/user-filter";
+  const state: RepositoryState = {
+    ...baseState(),
+    currentLocation: { kind: "branch", branchName, head: featureCommit, detached: false },
+    localBranches: [{ name: branchName, tipCommitId: featureCommit.id }, { name: "main", tipCommitId: mainCommit.id }],
+    history: [
+      { commit: featureCommit, parentIds: [baseCommit.id] },
+      { commit: mainCommit, parentIds: [baseCommit.id] },
+      { commit: baseCommit, parentIds: [] },
+    ],
+    comparison: { kind: "available", value: { baseRef: "refs/heads/main", mergeBase: baseCommit, ahead: 1, behind: 1 } },
+  };
+  const regionNotes = { workingTree: [], staging: [], stash: [], local: [], remote: [] };
+  const preview: CommandPreviewPresentation = {
+    active: null,
+    stale: false,
+    banner: true,
+    status: "supported",
+    sections: [],
+    history: [],
+    examples: [],
+    map: {
+      workingTree: [], staging: [], stash: [], local: [], remote: [], warnings: regionNotes, unknowns: regionNotes,
+      predictions: [{ id: "merge-prediction", description: "NEW MERGE COMMIT", parentCommitIds: [featureCommit.id, mainCommit.id] }],
+      pointers: [{ kind: "branch", label: branchName, target: { kind: "prediction", id: "merge-prediction" } }],
+    },
+  };
+  const map = createGitMapPresentation({ kind: "available", repositoryId: "repo", state }, { kind: "overview" }, { kind: "idle" }, preview);
+  assert.equal(map.graph.kind, "graph");
+  const pointer = map.graph.predictionPointers?.[0];
+  const head = map.graph.head;
+  const currentRef = map.graph.localBranches.find((ref) => ref.current);
+  assert.ok(pointer);
+  assert.ok(head);
+  assert.ok(currentRef);
+  assert.ok(pointer.y + 12 < head.y - 8);
+  assert.ok(pointer.y + 12 < currentRef.bounds.top);
+  assert.ok(pointer.y >= 18);
+});
+
 test("selection visual state keeps semantic targets in presentation", () => {
   const state = { remotes: { kind: "available" as const, value: [{ name: "origin", trackingRefs: [{ branchName: "feature", trackingRef: "refs/remotes/origin/feature", commitId: oid }], locallyKnownDefaultBranch: null }] }, upstream: { kind: "available" as const, value: { remoteName: "origin", branchName: "feature", trackingRef: "refs/remotes/origin/feature", relation: { kind: "available" as const, value: { ahead: 1, behind: 0 } } } }, history: [{ commit, parentIds: [] }] };
   const branch = createGitMapPresentation({ kind: "available", repositoryId: "repo", state: { ...baseState(), ...state } }, { kind: "branch", branchName: "feature" });
