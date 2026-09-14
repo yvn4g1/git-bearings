@@ -47,13 +47,14 @@ export function createGitMapPresentation(snapshot: RepositoryStateSnapshot, sele
   return {
     status: "available", repository: state.repository.rootPath, operationBanner: operationBanner(state),
     workingTree: { kind: workingTree.unstaged.length || workingTree.untracked.length || workingTree.conflicts.length ? "changes" : "clean", unstagedCount: workingTree.unstaged.length, modifiedCount: workingTree.unstaged.filter((change) => change.kind === "modified").length, untrackedCount: workingTree.untracked.length, conflictsCount: workingTree.conflicts.length, ...(selection.kind === "workingTree" ? { visualState: "selected" as const } : {}) },
-    staging: { stagedCount: workingTree.staged.length, ...(selection.kind === "staging" ? { visualState: "selected" as const } : {}) }, stash: selectedStash(stashPresentation(state), selection), graph: previewGraph(selectedGraph(createCommitGraphPresentation(state), state, selection), commandPreview), ...remoteFacts(state, selection), detailSnapshot: snapshot, selection, detailIdentity: selectionIdentity(selection), explanation: createExplanationPresentation(state, selection), ...(selection.kind === "commit" ? { commitDetail } : {}), ...(selection.kind === "upstream" ? { upstreamVisualState: "selected" as const } : {}), ...(commandPreview ? { commandPreview } : {}), detailMode,
+    staging: { stagedCount: workingTree.staged.length, ...(selection.kind === "staging" ? { visualState: "selected" as const } : {}) }, stash: selectedStash(stashPresentation(state), selection), graph: previewGraph(selectedGraph(createCommitGraphPresentation(state), state, selection), commandPreview, state), ...remoteFacts(state, selection), detailSnapshot: snapshot, selection, detailIdentity: selectionIdentity(selection), explanation: createExplanationPresentation(state, selection), ...(selection.kind === "commit" ? { commitDetail } : {}), ...(selection.kind === "upstream" ? { upstreamVisualState: "selected" as const } : {}), ...(commandPreview ? { commandPreview } : {}), detailMode,
   };
 }
 
-function previewGraph(graph: CommitGraphPresentation, preview: CommandPreviewPresentation | undefined): CommitGraphPresentation {
+function previewGraph(graph: CommitGraphPresentation, preview: CommandPreviewPresentation | undefined, state: RepositoryState): CommitGraphPresentation {
   if (!preview?.map || graph.kind !== "graph") return graph;
   const facts = new Map(graph.nodes.map((node) => [node.commitId, node]));
+  const fullSubjects = new Map(state.history.map(({ commit }) => [commit.id, commit.subject]));
   const predictions = new Map<string, { readonly x: number; readonly y: number }>();
   const factRight = Math.max(0, ...graph.nodes.map((node) => node.x));
   const predictionStep = 130;
@@ -64,13 +65,14 @@ function previewGraph(graph: CommitGraphPresentation, preview: CommandPreviewPre
     const basedOn = item.basedOn ? (item.basedOn.kind === "existing" ? facts.get(item.basedOn.id) : predictions.get(item.basedOn.id)) : undefined;
     const anchor = parents[0] ?? basedOn;
     const rewrittenOriginal = item.rewrittenFromCommitId ? facts.get(item.rewrittenFromCommitId) : undefined;
+    const rewrittenSubject = item.rewrittenFromCommitId ? fullSubjects.get(item.rewrittenFromCommitId) : undefined;
     const rewritten = rewrittenOriginal !== undefined && basedOn !== undefined;
     const point = rewritten
       ? { x: basedOn.x + predictionStep, y: basedOn.y }
       : { x: Math.max(anchor ? anchor.x + predictionStep : nextX, nextX), y: anchor ? anchor.y + (item.basedOn ? 34 : 0) : 48 + index * 34 };
     nextX = Math.max(nextX, point.x + predictionStep);
     predictions.set(item.id, point);
-    return { id: item.id, label: "Prediction" as const, description: rewrittenOriginal?.subject ?? item.description, ...point };
+    return { id: item.id, label: "Prediction" as const, description: rewrittenSubject ?? rewrittenOriginal?.subject ?? item.description, ...point };
   });
   const predictionEdges = preview.map.predictions.flatMap((item) => {
     const target = predictions.get(item.id)!;
