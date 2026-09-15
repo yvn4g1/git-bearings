@@ -4,6 +4,7 @@ import { RepositoryStateSnapshotStore } from "./repositoryStateSnapshot";
 import { AppViewStateStore } from "../domain/appViewStateStore";
 import type { SelectionState } from "../domain/appViewState";
 import type { CommandPreviewSession } from "./commandPreview";
+import { sanitizeDisplayText } from "./displayText";
 
 export const GIT_BEARINGS_SIDEBAR_VIEW_ID = "gitBearings.sidebar";
 
@@ -59,10 +60,10 @@ class GitBearingsSidebarProvider implements vscode.TreeDataProvider<SidebarItem>
 
 class SidebarItem extends vscode.TreeItem {
   constructor(readonly node: SidebarNode, readonly parent: SidebarItem | undefined) {
-    super(node.label, toVscodeCollapsibleState(node.collapsible));
+    super(sanitizeDisplayText(node.label), toVscodeCollapsibleState(node.collapsible));
     this.id = node.id;
-    this.description = node.description;
-    this.tooltip = node.tooltip ?? [node.label, node.description].filter(Boolean).join("\n");
+    this.description = node.description ? sanitizeDisplayText(node.description) : undefined;
+    this.tooltip = sanitizeDisplayText(node.tooltip ?? [node.label, node.description].filter(Boolean).join("\n"));
     if (node.command) this.command = node.command;
   }
 }
