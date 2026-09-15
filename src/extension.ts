@@ -22,6 +22,7 @@ import { RepositoryStateRefreshController } from "./repository/repositoryStateRe
 import { CommitDetailReader } from "./git/commitDetailReader";
 import { CommitDetailController } from "./ui/commitDetailController";
 import type { CommandPreviewSession } from "./ui/commandPreview";
+import { sanitizeDisplayText } from "./ui/displayText";
 
 const selectedRepositoryKey = "gitBearings.selectedRepository";
 
@@ -42,7 +43,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     resetViewState: () => appViewState.resetForRepositoryChange(),
     onDidChange: () => refreshController?.onSelectionChanged(),
     onDidAutoSelectAfterSelectionLost: (repository) => {
-      void vscode.window.showInformationMessage(`選択中のRepositoryが利用できなくなったため、${repository.rootPath} に切り替えました。`);
+      void vscode.window.showInformationMessage(`選択中のRepositoryが利用できなくなったため、${sanitizeDisplayText(repository.rootPath)} に切り替えました。`);
     },
   });
   const gitResolution = await resolveVscodeGitExecutable(vscode.extensions);
@@ -97,9 +98,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     const state = selection.currentState;
     if (state.kind !== "selected" && state.kind !== "selectionRequired") return;
     const picked = await vscode.window.showQuickPick(state.candidates.map((candidate) => ({
-      label: vscode.workspace.asRelativePath(candidate.rootPath, false) || candidate.rootPath,
-      description: candidate.rootPath,
-      detail: candidate.rootPath,
+      label: sanitizeDisplayText(vscode.workspace.asRelativePath(candidate.rootPath, false) || candidate.rootPath),
+      description: sanitizeDisplayText(candidate.rootPath),
+      detail: sanitizeDisplayText(candidate.rootPath),
       candidate,
     })), { placeHolder: "Git Bearingsで表示するRepositoryを選択" });
     if (picked) selection.select(picked.candidate.id);
@@ -125,7 +126,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await vscode.window.showInformationMessage("選択できる基準branchがありません。");
       return;
     }
-    const picked = await vscode.window.showQuickPick(candidates, {
+    const picked = await vscode.window.showQuickPick(candidates.map((candidate) => ({
+      ...candidate,
+      label: sanitizeDisplayText(candidate.label),
+      description: sanitizeDisplayText(candidate.description),
+      detail: sanitizeDisplayText(candidate.detail),
+    })), {
       placeHolder: "Git Bearingsの基準branchを選択",
     });
     if (!picked) return;
