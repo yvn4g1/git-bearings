@@ -8,4 +8,6 @@ package-lock.json
 .gitignore
 out/**/*.test.js
 out/**/*.test.js.map
+out/**/*.type-test.js
+out/**/*.type-test.js.map
 out/**/*.js.map
