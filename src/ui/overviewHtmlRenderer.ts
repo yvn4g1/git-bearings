@@ -1,4 +1,5 @@
 import type { OverviewPresentation } from "./overviewPresentation";
+import { sanitizeDisplayText } from "./displayText";
 
 export function renderOverviewHtml(presentation: OverviewPresentation): string {
   const repository = presentation.repository ? `<p class="overview-repository">${escapeHtml(presentation.repository)}</p>` : "";
@@ -8,4 +9,6 @@ export function renderOverviewHtml(presentation: OverviewPresentation): string {
   return `<section class="overview" aria-label="Overview">${repository}${banner}${sections}</section>`;
 }
 
-export function escapeHtml(value: string): string { return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
+export function escapeHtml(value: string): string {
+  return sanitizeDisplayText(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
