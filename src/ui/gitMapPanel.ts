@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import * as vscode from "vscode";
 import { renderGitMapHtml } from "./gitMapHtmlRenderer";
 import { createGitMapPresentation } from "./gitMapPresentation";
@@ -56,8 +57,5 @@ export class GitMapPanel implements vscode.Disposable {
 }
 
 function createNonce(): string {
-  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  let value = "";
-  for (let index = 0; index < 32; index += 1) value += alphabet[Math.floor(Math.random() * alphabet.length)];
-  return value;
+  return randomBytes(24).toString("base64url");
 }
