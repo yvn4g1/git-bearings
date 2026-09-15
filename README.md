@@ -13,7 +13,9 @@ Git Bearingsは、実際のGit Repositoryを読み取り、Gitの状態変化を
 
 Git BearingsはGit 2.23以降を対象に、Repositoryの状態をread-onlyで観測します。Git書き込み、auto-fetch、外部network通信、Telemetryは行いません。PreviewとGoal UIは操作を実行せず、Fact・Prediction・Unknownを区別して表示します。
 
-Git CLIの観測は厳格なcommand signature allowlistとshellなしのargv実行に限定しています。Gitがmissing objectを暗黙に取得することを避けるためlazy fetchも無効化し、partial cloneは安全側に倒して現在は対象外とします。Git commandのstdout / stderrにも上限を設け、巨大出力は部分的なFactとして扱わず取得失敗にします。
+Git CLIの観測は厳格なcommand signature allowlistとshellなしのargv実行に限定しています。Gitがmissing objectを暗黙に取得することを避けるためlazy fetchも無効化し、partial cloneまたはpromisor / partial-clone用Remote設定を検出したRepositoryは、安全側に倒して現在は対象外とします。Git commandのstdout / stderrにも上限を設け、巨大出力は部分的なFactとして扱わず取得失敗にします。
+
+Repository由来のbranch名、commit subject、path、stash messageなどにUnicode bidi制御文字が含まれる場合は、その制御文字を`[RLO]`や`[PDI]`のような可視マーカーへ変換して表示します。見た目の文字順だけを偽装して別の名前やpathに見せることを避けるためです。
 
 Git BearingsはVS Codeが信頼済みとしたworkspaceでの利用を前提とし、Restricted Modeでは動作対象外です。敵対的な`.git` directoryそのものを安全な入力として保証するものではありません。
 
@@ -31,7 +33,7 @@ Previewは次の限定した構文だけを解析し、状態変化の予測を�
 
 ## Supported environment
 
-正式確認対象はWindows、macOS、Linux上のVS Code DesktopとWSLです。Remote SSHとDev ContainersはMVPの正式保証対象外です。partial cloneも現在は正式対応外です。
+正式確認対象はWindows、macOS、Linux上のVS Code DesktopとWSLです。Remote SSHとDev ContainersはMVPの正式保証対象外です。partial cloneおよびpromisor remoteを利用するRepositoryも現在は正式対応外です。
 
 ## Development
 
