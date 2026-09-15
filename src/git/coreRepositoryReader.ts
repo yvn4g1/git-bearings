@@ -14,6 +14,7 @@ import type {
 } from "../domain/repositoryState";
 import { GitExecutor, type GitExecutionResult } from "./gitExecutor";
 
+const PARTIAL_CLONE_ARGS = ["config", "--local", "--get", "extensions.partialClone"] as const;
 const FILTER_CONFIG_ARGS = [
   "config",
   "--null",
@@ -67,6 +68,9 @@ export class CoreRepositoryReader {
         this.supportedGitVersion = true;
       }
       const repositoryRoot = await this.readRepositoryRoot(repositoryPath);
+      if (await this.isPartialClone(repositoryPath)) {
+        return unavailable("Partial clone repositories are not supported because Git may fetch missing objects implicitly.");
+      }
       const index = await this.execute(["ls-files", "--stage", "-z"], repositoryPath);
       const trackedPaths = parseIndexEntries(index.stdout);
 
@@ -126,6 +130,17 @@ export class CoreRepositoryReader {
       throw new Error("Selected repository path does not match Git repository root.");
     }
     return rootPath;
+  }
+
+  private async isPartialClone(repositoryPath: string): Promise<boolean> {
+    const result = await this.gitExecutor.execute(PARTIAL_CLONE_ARGS, repositoryPath);
+    if (result.kind === "completed" && result.exitCode === 1) {
+      return false;
+    }
+    if (result.kind === "completed" && result.exitCode === 0) {
+      return true;
+    }
+    throw new Error("Partial clone configuration could not be read safely.");
   }
 
   private async readConfiguredFilterDrivers(repositoryPath: string): Promise<Set<string>> {

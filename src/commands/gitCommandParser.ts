@@ -34,6 +34,7 @@ export function tokenizeGitCommand(input: string): readonly string[] | undefined
 type TokenizeResult = { readonly kind: "tokens"; readonly tokens: readonly string[] } | { readonly kind: "failure"; readonly reason: string };
 function tokenize(input: string): TokenizeResult {
   if (input.includes("\r") || input.includes("\n")) return { kind: "failure", reason: "複数行入力は解析できません。" };
+  if (containsShellExpansion(input)) return { kind: "failure", reason: "shell展開を含む入力は解析できません。" };
   const tokens: string[] = []; let token = ""; let started = false; let quote: "single" | "double" | undefined;
   const finish = () => { if (started) { tokens.push(token); token = ""; started = false; } };
   for (let index = 0; index < input.length; index += 1) {
@@ -53,6 +54,10 @@ function tokenize(input: string): TokenizeResult {
   if (quote) return { kind: "failure", reason: "quoteが閉じられていません。" };
   finish();
   return tokens.length ? { kind: "tokens", tokens } : { kind: "failure", reason: "入力がありません。" };
+}
+
+function containsShellExpansion(input: string): boolean {
+  return input.includes("$") || input.includes("`") || /%[^%\r\n]+%/.test(input) || /![^!\r\n]+!/.test(input);
 }
 
 function add(args: readonly string[]): GitCommandParseResult {

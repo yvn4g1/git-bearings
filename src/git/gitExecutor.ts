@@ -27,6 +27,7 @@ interface CommandSignature {
   readonly id:
     | "version"
     | "showTopLevel"
+    | "partialCloneMarker"
     | "listIndex"
     | "listFilterConfig"
     | "checkFilterAttribute"
@@ -61,6 +62,12 @@ const COMMAND_SIGNATURES: readonly CommandSignature[] = [
   {
     id: "showTopLevel",
     args: ["rev-parse", "--show-toplevel"],
+    requiresCwd: true,
+    stdin: "forbidden",
+  },
+  {
+    id: "partialCloneMarker",
+    args: ["config", "--local", "--get", "extensions.partialClone"],
     requiresCwd: true,
     stdin: "forbidden",
   },
@@ -303,6 +310,7 @@ export function createGitEnvironment(
     ...environment,
     GIT_TERMINAL_PROMPT: "0",
     GIT_OPTIONAL_LOCKS: "0",
+    GIT_NO_LAZY_FETCH: "1",
     GIT_PAGER: "cat",
     PAGER: "cat",
   };
