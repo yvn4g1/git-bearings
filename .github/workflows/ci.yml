@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm run test:git-executor
+      - run: npm run test:core-reader
+      - run: npm run test:repository-selection
+      - run: npm run test:supplemental-reader
+      - run: npm run test:comparison
+      - run: npm run test:sidebar
+      - run: npm run test:overview
+      - run: npm run test:explanation
+      - run: npm run test:commit-detail
+      - run: npm run test:command-parser
+      - run: npm run test:command-simulator
+      - run: npm run test:git-map
+      - run: npm run test:command-preview
+      - run: npm run test:goal
+      - run: npm run test:refresh
+      - run: npm run test:hardening
