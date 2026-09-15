@@ -28,6 +28,7 @@ interface CommandSignature {
     | "version"
     | "showTopLevel"
     | "partialCloneMarker"
+    | "promisorRemoteMarker"
     | "listIndex"
     | "listFilterConfig"
     | "checkFilterAttribute"
@@ -68,6 +69,19 @@ const COMMAND_SIGNATURES: readonly CommandSignature[] = [
   {
     id: "partialCloneMarker",
     args: ["config", "--local", "--get", "extensions.partialClone"],
+    requiresCwd: true,
+    stdin: "forbidden",
+  },
+  {
+    id: "promisorRemoteMarker",
+    args: [
+      "config",
+      "--null",
+      "--name-only",
+      "--get-regexp",
+      "^remote\\..*\\.(promisor|partialclonefilter)$",
+      ".+",
+    ],
     requiresCwd: true,
     stdin: "forbidden",
   },
