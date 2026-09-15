@@ -37,24 +37,35 @@ jobs:
       - run: npm run test:refresh
       - run: npm run test:hardening
       - name: Package VSIX
-        run: npx --yes @vscode/vsce package --out git-bearings-ci.vsix
+        run: npx --yes @vscode/vsce package --out git-bearings-0.1.0.vsix
       - name: Verify VSIX contents
         shell: bash
         run: |
-          unzip -Z1 git-bearings-ci.vsix | tee vsix-files.txt
+          unzip -Z1 git-bearings-0.1.0.vsix | tee vsix-files.txt
           grep -qx 'extension/package.json' vsix-files.txt
           grep -Eiq '^extension/readme\.md$' vsix-files.txt
+          grep -Eiq '^extension/license$' vsix-files.txt
           grep -qx 'extension/out/extension.js' vsix-files.txt
-          if grep -Eq '^extension/(src|docs|\.github|\.vscode)/' vsix-files.txt; then
+          grep -qx 'extension/docs/images/overview.png' vsix-files.txt
+
+          if grep -Eq '^extension/(src|\.github|\.vscode)/' vsix-files.txt; then
             echo 'Source/development directories must not be packaged.' >&2
             exit 1
           fi
+
+          unexpected_docs="$(grep -E '^extension/docs/' vsix-files.txt | grep -v '^extension/docs/images/overview.png$' || true)"
+          if [ -n "$unexpected_docs" ]; then
+            echo 'Only docs/images/overview.png may be packaged from docs/.' >&2
+            printf '%s\n' "$unexpected_docs" >&2
+            exit 1
+          fi
+
           if grep -Eq '^extension/out/.*(\.test\.js|\.type-test\.js|\.map)$' vsix-files.txt; then
             echo 'Tests/type-tests/source maps must not be packaged.' >&2
             exit 1
           fi
       - uses: actions/upload-artifact@v4
         with:
-          name: git-bearings-vsix
-          path: git-bearings-ci.vsix
+          name: git-bearings-v0.1.0-vsix
+          path: git-bearings-0.1.0.vsix
           if-no-files-found: error
