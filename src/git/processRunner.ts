@@ -4,6 +4,8 @@ import {
   type SpawnOptions,
 } from "node:child_process";
 
+export const DEFAULT_PROCESS_OUTPUT_LIMIT_BYTES = 8 * 1024 * 1024;
+
 export interface ProcessRequest {
   readonly executable: string;
   readonly args: readonly string[];
@@ -21,6 +23,7 @@ export type ProcessResult =
       readonly stderr: string;
     }
   | { readonly kind: "timedOut"; readonly timeoutMs: number }
+  | { readonly kind: "outputLimitExceeded"; readonly limitBytes: number }
   | { readonly kind: "spawnFailed"; readonly error: Error };
 
 export type SpawnProcess = (
@@ -34,7 +37,10 @@ export interface ProcessExecutor {
 }
 
 export class ProcessRunner implements ProcessExecutor {
-  constructor(private readonly spawnProcess: SpawnProcess = nodeSpawn) {}
+  constructor(
+    private readonly spawnProcess: SpawnProcess = nodeSpawn,
+    private readonly maxOutputBytes = DEFAULT_PROCESS_OUTPUT_LIMIT_BYTES,
+  ) {}
 
   run(request: ProcessRequest): Promise<ProcessResult> {
     return new Promise((resolve) => {
@@ -56,6 +62,7 @@ export class ProcessRunner implements ProcessExecutor {
       let timeout: NodeJS.Timeout | undefined;
       const stdout: Buffer[] = [];
       const stderr: Buffer[] = [];
+      let outputBytes = 0;
       let stdoutEnded = child.stdout === null;
       let stderrEnded = child.stderr === null;
       let closed = false;
@@ -72,6 +79,26 @@ export class ProcessRunner implements ProcessExecutor {
         resolve(result);
       };
 
+      const terminateForOutputLimit = (): void => {
+        try {
+          child.kill("SIGTERM");
+        } catch {
+          // The output limit result takes precedence if process termination fails.
+        }
+        finish({ kind: "outputLimitExceeded", limitBytes: this.maxOutputBytes });
+      };
+
+      const appendOutput = (target: Buffer[], chunk: Buffer): void => {
+        if (settled) return;
+        const copy = Buffer.from(chunk);
+        if (outputBytes + copy.byteLength > this.maxOutputBytes) {
+          terminateForOutputLimit();
+          return;
+        }
+        outputBytes += copy.byteLength;
+        target.push(copy);
+      };
+
       const finishCompleted = (): void => {
         if (!closed || !stdoutEnded || !stderrEnded) {
           return;
@@ -86,14 +113,14 @@ export class ProcessRunner implements ProcessExecutor {
       };
 
       child.stdout?.on("data", (chunk: Buffer) => {
-        stdout.push(Buffer.from(chunk));
+        appendOutput(stdout, chunk);
       });
       child.stdout?.once("end", () => {
         stdoutEnded = true;
         finishCompleted();
       });
       child.stderr?.on("data", (chunk: Buffer) => {
-        stderr.push(Buffer.from(chunk));
+        appendOutput(stderr, chunk);
       });
       child.stderr?.once("end", () => {
         stderrEnded = true;
@@ -120,14 +147,16 @@ export class ProcessRunner implements ProcessExecutor {
         child.stdin?.end(request.stdin);
       }
 
-      timeout = setTimeout(() => {
-        try {
-          child.kill("SIGTERM");
-        } catch {
-          // The timeout result still takes precedence if process termination fails.
-        }
-        finish({ kind: "timedOut", timeoutMs: request.timeoutMs });
-      }, request.timeoutMs);
+      if (!settled) {
+        timeout = setTimeout(() => {
+          try {
+            child.kill("SIGTERM");
+          } catch {
+            // The timeout result still takes precedence if process termination fails.
+          }
+          finish({ kind: "timedOut", timeoutMs: request.timeoutMs });
+        }, request.timeoutMs);
+      }
     });
   }
 }
