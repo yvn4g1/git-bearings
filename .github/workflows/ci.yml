@@ -43,14 +43,14 @@ jobs:
         run: |
           unzip -Z1 git-bearings-ci.vsix | tee vsix-files.txt
           grep -qx 'extension/package.json' vsix-files.txt
-          grep -qx 'extension/README.md' vsix-files.txt
+          grep -Eiq '^extension/readme\.md$' vsix-files.txt
           grep -qx 'extension/out/extension.js' vsix-files.txt
           if grep -Eq '^extension/(src|docs|\.github|\.vscode)/' vsix-files.txt; then
             echo 'Source/development directories must not be packaged.' >&2
             exit 1
           fi
-          if grep -Eq '^extension/out/.*(\.test\.js|\.map)$' vsix-files.txt; then
-            echo 'Tests/source maps must not be packaged.' >&2
+          if grep -Eq '^extension/out/.*(\.test\.js|\.type-test\.js|\.map)$' vsix-files.txt; then
+            echo 'Tests/type-tests/source maps must not be packaged.' >&2
             exit 1
           fi
       - uses: actions/upload-artifact@v4
