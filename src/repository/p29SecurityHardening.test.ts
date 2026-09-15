@@ -1,4 +1,5 @@
 import { strict as assert } from "node:assert";
+import { spawn as nodeSpawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,10 +13,11 @@ import {
   GitExecutor,
   type GitLogger,
 } from "../git/gitExecutor";
-import type {
-  ProcessExecutor,
-  ProcessRequest,
-  ProcessResult,
+import {
+  ProcessRunner,
+  type ProcessExecutor,
+  type ProcessRequest,
+  type ProcessResult,
 } from "../git/processRunner";
 
 const silentLogger: GitLogger = { appendLine: () => undefined };
@@ -67,6 +69,18 @@ test("Git environment overrides inherited Git variables and disables lazy fetch"
   assert.equal(environment.GIT_NO_LAZY_FETCH, "1");
   assert.equal(environment.GIT_TERMINAL_PROMPT, "0");
   assert.equal(environment.GIT_OPTIONAL_LOCKS, "0");
+});
+
+test("ProcessRunner stops a process when combined stdout/stderr exceeds the byte limit", async () => {
+  const runner = new ProcessRunner(nodeSpawn, 1_024);
+  const result = await runner.run({
+    executable: process.execPath,
+    args: ["--eval", "process.stdout.write('x'.repeat(2048))"],
+    environment: process.env,
+    timeoutMs: 1_000,
+  });
+
+  assert.deepEqual(result, { kind: "outputLimitExceeded", limitBytes: 1_024 });
 });
 
 test("Core reader rejects a partial clone before object-reading commands", async () => {
