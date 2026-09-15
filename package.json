@@ -14,6 +14,11 @@
   "categories": [
     "Other"
   ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false
+    }
+  },
   "activationEvents": [],
   "contributes": {
     "commands": [
@@ -48,6 +53,7 @@
   "scripts": {
     "compile": "tsc -p ./",
     "check": "tsc --noEmit -p ./",
+    "test": "npm run check && npm run test:git-executor && npm run test:core-reader && npm run test:repository-selection && npm run test:supplemental-reader && npm run test:comparison && npm run test:sidebar && npm run test:overview && npm run test:explanation && npm run test:commit-detail && npm run test:command-parser && npm run test:command-simulator && npm run test:git-map && npm run test:command-preview && npm run test:goal && npm run test:refresh && npm run test:hardening",
     "test:git-executor": "npm run compile && node --test out/git/gitExecutor.test.js",
     "test:core-reader": "npm run compile && node --test out/git/coreRepositoryReader.test.js out/git/p28LocalBranchHistory.test.js",
     "test:repository-selection": "npm run compile && node --test out/domain/appViewStateStore.test.js out/domain/selectionReconciliation.test.js out/repository/repositorySelection.test.js out/repository/vscodeGitRepositorySource.test.js",
