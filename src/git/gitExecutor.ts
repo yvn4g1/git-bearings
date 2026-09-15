@@ -399,6 +399,16 @@ function formatResultLog(
         durationMs +
         "ms"
       );
+    case "outputLimitExceeded":
+      return (
+        "Git " +
+        signature +
+        ": outputLimitExceeded at " +
+        result.limitBytes +
+        " bytes duration=" +
+        durationMs +
+        "ms"
+      );
     case "spawnFailed":
       return "Git " + signature + ": spawnFailed duration=" + durationMs + "ms";
   }
