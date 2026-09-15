@@ -1,7 +1,8 @@
 .github/**
 .vscode/**
 src/**
-docs/**
+docs/adr/**
+docs/*.md
 AGENTS.md
 tsconfig.json
 package-lock.json
