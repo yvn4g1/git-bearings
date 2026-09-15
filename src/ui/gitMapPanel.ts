@@ -9,6 +9,7 @@ import { isSelectionValid, reconcileSelection } from "../domain/selectionReconci
 import { CommitDetailController } from "./commitDetailController";
 import { CommandPreviewController, createCommandPreviewPresentation, type CommandPreviewSession } from "./commandPreview";
 import { formatGoalCommand, resolveGoal } from "../domain/goal";
+import { addCurrentPreviewClearAction } from "./previewClearControl";
 
 const GIT_MAP_PANEL_VIEW_TYPE = "gitBearings.gitMap";
 
@@ -52,7 +53,12 @@ export class GitMapPanel implements vscode.Disposable {
   }
 
   private render(): void {
-    if (this.panel) { const state = this.snapshotStore.current.kind === "available" ? this.snapshotStore.current.state : undefined; const preview = createCommandPreviewPresentation(this.viewState.current.preview, state); this.panel.webview.html = renderGitMapHtml(createGitMapPresentation(this.snapshotStore.current, this.viewState.current.selection, this.commitDetails.current, preview, this.viewState.current.detailMode), createNonce()); }
+    if (this.panel) {
+      const state = this.snapshotStore.current.kind === "available" ? this.snapshotStore.current.state : undefined;
+      const preview = createCommandPreviewPresentation(this.viewState.current.preview, state);
+      const html = renderGitMapHtml(createGitMapPresentation(this.snapshotStore.current, this.viewState.current.selection, this.commitDetails.current, preview, this.viewState.current.detailMode), createNonce());
+      this.panel.webview.html = addCurrentPreviewClearAction(html, preview.banner && !preview.stale);
+    }
   }
 }
 
