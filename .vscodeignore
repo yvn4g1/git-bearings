@@ -1,0 +1,11 @@
+.github/**
+.vscode/**
+src/**
+docs/**
+AGENTS.md
+tsconfig.json
+package-lock.json
+.gitignore
+out/**/*.test.js
+out/**/*.test.js.map
+out/**/*.js.map
