@@ -44,7 +44,7 @@ jobs:
           unzip -Z1 git-bearings-0.1.0.vsix | tee vsix-files.txt
           grep -qx 'extension/package.json' vsix-files.txt
           grep -Eiq '^extension/readme\.md$' vsix-files.txt
-          grep -Eiq '^extension/license$' vsix-files.txt
+          grep -Eiq '^extension/license(\.txt)?$' vsix-files.txt
           grep -qx 'extension/out/extension.js' vsix-files.txt
           grep -qx 'extension/docs/images/overview.png' vsix-files.txt
 
