@@ -1,12 +1,17 @@
 {
   "name": "git-bearings",
   "displayName": "Git Bearings",
-  "description": "A VS Code extension that makes a repository's Git state easier to see.",
-  "version": "0.0.0",
+  "description": "A read-only VS Code extension for visualizing Git state and previewing Git commands.",
+  "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/yvn4g1/git-bearings.git"
+  },
+  "homepage": "https://github.com/yvn4g1/git-bearings#readme",
+  "bugs": {
+    "url": "https://github.com/yvn4g1/git-bearings/issues"
   },
   "engines": {
     "vscode": "^1.93.0"
