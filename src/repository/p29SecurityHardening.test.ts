@@ -19,6 +19,8 @@ import {
   type ProcessRequest,
   type ProcessResult,
 } from "../git/processRunner";
+import { containsBidiControl, sanitizeDisplayText } from "../ui/displayText";
+import { escapeHtml } from "../ui/overviewHtmlRenderer";
 
 const silentLogger: GitLogger = { appendLine: () => undefined };
 const id = "a".repeat(40);
@@ -97,13 +99,59 @@ test("Core reader rejects a partial clone before object-reading commands", async
 
     assert.equal(result.kind, "unavailable");
     if (result.kind === "unavailable") {
-      assert.match(result.reason, /Partial clone repositories are not supported/);
+      assert.match(result.reason, /Partial clone or promisor remote repositories are not supported/);
     }
     assert.ok(requests.some((request) => request.args.includes("extensions.partialClone")));
     assert.ok(!requests.some((request) => request.args.includes("ls-files")));
     assert.ok(!requests.some((request) => request.args.includes("status")));
   } finally {
     await rm(repository, { recursive: true, force: true });
+  }
+});
+
+test("Core reader rejects promisor remote configuration before object-reading commands", async () => {
+  const repository = await mkdtemp(join(tmpdir(), "git-bearings-p29-promisor-"));
+  const requests: ProcessRequest[] = [];
+  const executor = new GitExecutor(
+    "git",
+    new PromisorRemoteProcessExecutor(repository, requests),
+    silentLogger,
+  );
+
+  try {
+    const result = await new CoreRepositoryReader(executor).read(repository);
+
+    assert.equal(result.kind, "unavailable");
+    if (result.kind === "unavailable") {
+      assert.match(result.reason, /Partial clone or promisor remote repositories are not supported/);
+    }
+    assert.ok(requests.some((request) => request.args.includes("extensions.partialClone")));
+    assert.ok(requests.some((request) => request.args.includes("^remote\\..*\\.(promisor|partialclonefilter)$")));
+    assert.ok(!requests.some((request) => request.args.includes("ls-files")));
+    assert.ok(!requests.some((request) => request.args.includes("status")));
+  } finally {
+    await rm(repository, { recursive: true, force: true });
+  }
+});
+
+test("Unicode bidi controls are made visible in repository-derived display text", () => {
+  const fixtures = [
+    { kind: "branch", value: "feature/\u202Eevil" },
+    { kind: "commit subject", value: "fix \u2066main\u2069" },
+    { kind: "path", value: "src/\u202Ecod.exe.txt" },
+    { kind: "stash message", value: "On main: \u200Fsecret" },
+  ];
+
+  for (const fixture of fixtures) {
+    assert.equal(containsBidiControl(fixture.value), true, fixture.kind);
+    const sanitized = sanitizeDisplayText(fixture.value);
+    assert.equal(containsBidiControl(sanitized), false, fixture.kind);
+    assert.match(sanitized, /\[(RLO|LRI|PDI|RLM)\]/, fixture.kind);
+
+    const html = escapeHtml(`<${fixture.value}>`);
+    assert.equal(containsBidiControl(html), false, fixture.kind);
+    assert.ok(html.startsWith("&lt;"), fixture.kind);
+    assert.ok(html.endsWith("&gt;"), fixture.kind);
   }
 });
 
@@ -180,10 +228,52 @@ class PartialCloneProcessExecutor implements ProcessExecutor {
   }
 }
 
+class PromisorRemoteProcessExecutor implements ProcessExecutor {
+  constructor(
+    private readonly repository: string,
+    private readonly requests: ProcessRequest[],
+  ) {}
+
+  async run(request: ProcessRequest): Promise<ProcessResult> {
+    this.requests.push(request);
+    const args = request.args;
+
+    if (same(args, ["--no-pager", "version"])) {
+      return completed("git version 2.45.0\n");
+    }
+    if (same(args, ["--no-pager", "rev-parse", "--show-toplevel"])) {
+      return completed(this.repository + "\n");
+    }
+    if (same(args, ["--no-pager", "config", "--local", "--get", "extensions.partialClone"])) {
+      return completedWithExit(1, "");
+    }
+    if (same(args, [
+      "--no-pager",
+      "config",
+      "--null",
+      "--name-only",
+      "--get-regexp",
+      "^remote\\..*\\.(promisor|partialclonefilter)$",
+      ".+",
+    ])) {
+      return completed("remote.origin.promisor\0");
+    }
+
+    return {
+      kind: "spawnFailed",
+      error: new Error(`Unexpected Git invocation: ${args.join(" ")}`),
+    };
+  }
+}
+
 function same(actual: readonly string[], expected: readonly string[]): boolean {
   return actual.length === expected.length && actual.every((value, index) => value === expected[index]);
 }
 
 function completed(stdout: string): ProcessResult {
-  return { kind: "completed", exitCode: 0, stdout, stderr: "" };
+  return completedWithExit(0, stdout);
+}
+
+function completedWithExit(exitCode: number, stdout: string): ProcessResult {
+  return { kind: "completed", exitCode, stdout, stderr: "" };
 }
